@@ -1,5 +1,11 @@
 package main
 
+import (
+	"io"
+	"crypto/rand"
+)
+
+
 //import "io"
 
 type CryptState struct{
@@ -9,28 +15,24 @@ type CryptState struct{
 }
 
 
-/*
 
-func (cryptState *CryptState) GenerateKey(mode string) error {
+func (cryptState *CryptState) GenerateKey() error {
 
-	key := make([]byte, cm.KeySize())
-	_, err = io.ReadFull(rand.Reader, key)
+	key := make([]byte, 100)
+	_, err := io.ReadFull(rand.Reader, key)
+	if err != nil {
+		return err
+	}
+	cryptState.key = key
+
+	cryptState.encryptIV = make([]byte, 100)
+	_, err = io.ReadFull(rand.Reader, cryptState.encryptIV)
 	if err != nil {
 		return err
 	}
 
-	cm.SetKey(key)
-	cs.mode = cm
-	cs.Key = key
-
-	cs.EncryptIV = make([]byte, cm.NonceSize())
-	_, err = io.ReadFull(rand.Reader, cs.EncryptIV)
-	if err != nil {
-		return err
-	}
-
-	cs.DecryptIV = make([]byte, cm.NonceSize())
-	_, err = io.ReadFull(rand.Reader, cs.DecryptIV)
+	cryptState.decryptIV = make([]byte, 100)
+	_, err = io.ReadFull(rand.Reader, cryptState.decryptIV)
 	if err != nil {
 		return err
 	}
@@ -39,7 +41,6 @@ func (cryptState *CryptState) GenerateKey(mode string) error {
 }
 
 
-*/
 
 func SupportedModes() []string {
 	return []string{

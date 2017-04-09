@@ -9,24 +9,29 @@ import (
 	"net"
 	"io"
 	"bufio"
-	"fmt"
-	//"database/sql/driver"
 )
-
 
 type Client struct {
 	pid  int64
 
 	username string
 	conn net.Conn
+
 	server *Server
 	reader  *bufio.Reader
+
 	tcpaddr *net.TCPAddr
 	certHash string
 
+
+
+	//client auth infomations
+	codecs []int32
+	tokens []string
+
+	//crypt state
 	cryptState CryptState
 
-	//state string
 }
 
 //init client
@@ -37,7 +42,7 @@ func (client *Client) init(conn net.Conn){
 
 }
 
-func (client *Client) sendMessage(msg interface{}, conn net.Conn) error {
+func (client *Client) sendMessage(msg interface{}) error {
 	buf := new(bytes.Buffer)
 	var (
 		kind    uint16
@@ -72,7 +77,7 @@ func (client *Client) sendMessage(msg interface{}, conn net.Conn) error {
 		return err
 	}
 
-	_, err = conn.Write(buf.Bytes())
+	_, err = client.conn.Write(buf.Bytes())
 	if err != nil {
 		return err
 	}
@@ -81,7 +86,7 @@ func (client *Client) sendMessage(msg interface{}, conn net.Conn) error {
 }
 
 
-
+/*
 // TLS receive loop
 func (client *Client) tlsRecvLoop() {
 	for {
@@ -93,7 +98,7 @@ func (client *Client) tlsRecvLoop() {
 		client.server.incoming <- msg
 
 	}
-}
+}*/
 
 
 func (client *Client) readProtoMessage() (msg *Message, err error) {
@@ -103,26 +108,22 @@ func (client *Client) readProtoMessage() (msg *Message, err error) {
 	)
 
 	// Read the message type (16-bit big-endian unsigned integer)
-	fmt.Println("check 01010")
 	err = binary.Read(client.reader, binary.BigEndian, &kind)
 	if err != nil {
 		return
 	}
-	fmt.Println("check 01")
 
 	// Read the message length (32-bit big-endian unsigned integer)
 	err = binary.Read(client.reader, binary.BigEndian, &length)
 	if err != nil {
 		return
 	}
-	fmt.Println("check 02")
 
 	buf := make([]byte, length)
 	_, err = io.ReadFull(client.reader, buf)
 	if err != nil {
 		return
 	}
-	fmt.Println("check 03")
 
 	msg = &Message{
 		buf:    buf,
@@ -130,7 +131,7 @@ func (client *Client) readProtoMessage() (msg *Message, err error) {
 		client: client,
 	}
 
-	return
+	return msg, err
 }
 
 //TODO

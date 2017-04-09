@@ -12,15 +12,11 @@ const(
 )
 
 func main() {
-
-	server, err := AddServer(ROOT_SERVER)
+	server, err := CreateServer(ROOT_SERVER)
 	if err != nil {
 		//log.p
 	}
-
-	go server.Start()
-
-
+	go server.StartServer()
 	// keep main goroutine alive
 	select {}
 
