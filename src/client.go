@@ -42,6 +42,8 @@ func (client *Client) init(conn net.Conn){
 
 }
 
+
+//send msg to client
 func (client *Client) sendMessage(msg interface{}) error {
 	buf := new(bytes.Buffer)
 	var (
@@ -86,20 +88,6 @@ func (client *Client) sendMessage(msg interface{}) error {
 }
 
 
-/*
-// TLS receive loop
-func (client *Client) tlsRecvLoop() {
-	for {
-		// The version handshake is done, the client has been authenticated and it has received
-		// all necessary information regarding the server.  Now we're ready to roll!
-		// Try to read the next message in the pool
-		msg, _ := client.readProtoMessage()
-
-		client.server.incoming <- msg
-
-	}
-}*/
-
 
 func (client *Client) readProtoMessage() (msg *Message, err error) {
 	var (
@@ -108,6 +96,7 @@ func (client *Client) readProtoMessage() (msg *Message, err error) {
 	)
 
 	// Read the message type (16-bit big-endian unsigned integer)
+	//read data form io.reader
 	err = binary.Read(client.reader, binary.BigEndian, &kind)
 	if err != nil {
 		return
@@ -140,10 +129,4 @@ func (client *Client) Disconnect() {
 
 }
 
-func (client *Client)readPacket(temp []byte, ) (n int, err error){
 
-
-	n, err = client.conn.Read(temp)
-
-	return n, err
-}

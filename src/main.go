@@ -1,6 +1,6 @@
 // @author 허재화 <jhwaheo@smilegate.com>
 // @version 1.0
-// murgo server의 main
+// murgo server main
 
 package main
 import (
@@ -17,6 +17,7 @@ func main() {
 		//log.p
 	}
 	go server.StartServer()
+
 	// keep main goroutine alive
 	select {}
 

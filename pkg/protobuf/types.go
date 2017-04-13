@@ -32,13 +32,6 @@ const (
 	MessageServerConfig
 )
 
-const (
-	UDPMessageVoiceCELTAlpha = iota
-	UDPMessagePing
-	UDPMessageVoiceSpeex
-	UDPMessageVoiceCELTBeta
-	UDPMessageVoiceOpus
-)
 
 // Returns the numeric value identifying the message type of msg on the wire.
 func MessageType(msg interface{}) uint16 {
