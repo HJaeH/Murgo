@@ -1,8 +1,9 @@
 // @author 허재화 <jhwaheo@smilegate.com>
 // @version 1.0
-// configure
+// server configure 파일
 
-package main
+package config
+
 
 
 const (

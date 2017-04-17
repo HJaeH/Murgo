@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"io"
@@ -14,11 +14,9 @@ type CryptState struct{
 	decryptIV []byte
 }
 
-
-
 func (cryptState *CryptState) GenerateKey() error {
 
-	key := make([]byte, 100)
+	key := make([]byte, 100)// todo : need specified byte size
 	_, err := io.ReadFull(rand.Reader, key)
 	if err != nil {
 		return err
@@ -36,11 +34,20 @@ func (cryptState *CryptState) GenerateKey() error {
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 
+func (cryptState *CryptState)Key() ([]byte){
+	return cryptState.key
+}
 
+func (cryptState *CryptState)EncryptIV()([]byte){
+	return cryptState.encryptIV
+}
+
+func (cryptState *CryptState)DecryptIV()([]byte){
+	return cryptState.decryptIV
+}
 
 func SupportedModes() []string {
 	return []string{

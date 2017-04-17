@@ -2,8 +2,9 @@
 // The use of this source code is goverened by a BSD-style
 // license that can be found in the LICENSE-file.
 
-package mumbleproto
+package util
 
+//import "mumble.info/grumble/pkg/mumbleproto"
 const (
 	MessageVersion uint16 = iota
 	MessageUDPTunnel
@@ -32,6 +33,7 @@ const (
 	MessageServerConfig
 )
 
+/*
 
 // Returns the numeric value identifying the message type of msg on the wire.
 func MessageType(msg interface{}) uint16 {
@@ -90,3 +92,4 @@ func MessageType(msg interface{}) uint16 {
 	}
 	panic("unknown type")
 }
+*/

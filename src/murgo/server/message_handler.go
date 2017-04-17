@@ -1,159 +1,79 @@
-package main
+// @author 허재화 <jhwaheo@smilegate.com>
+// @version 1.0
+// murgo 메시지 핸들러
+
+
+package server
+
 
 import (
 	"fmt"
-	"net"
-	"crypto/tls"
-	"log"
-	"../pkg/protobuf"
 	"github.com/golang/protobuf/proto"
-	"io"
-	"crypto/sha1"
-	"encoding/hex"
+	"mumble.info/grumble/pkg/mumbleproto"
+	"mumble.info/grumble/pkg/acl"
 )
 
-type Server struct {
-	SID int64
-	incoming chan(*Message)
+type MessageHandler struct {
 
-	tcpl    *net.TCPListener
-	tlsl    net.Listener
-	//udpconn *net.UDPConn
-	tlscfg  *tls.Config
-
-
-	//usernames map[string]*User
-	//users  map[uint32]*User
-
+	supervisor *Supervisor
+	cast chan interface{}
 
 }
+type Message struct {
+	buf    []byte
+	kind   uint16
+	client *TlsClient
+	testCounter int
+}
 
-func  CreateServer(id int64) (s *Server, err error) {
+func NewMessageHandler(supervisor *Supervisor)( *MessageHandler){
+	messageHandler := new(MessageHandler)
+	messageHandler.supervisor = supervisor
 
-	s = new(Server)
-	s.SID = id
-	s.incoming = make (chan *Message)
-
-	return s, err
+	messageHandler.cast = make( chan interface{})
+	return messageHandler
 }
 
 
-func (server *Server) StartServer() (err error){
+func (messageHandler *MessageHandler) startMassageHandler(){
+	for{
+		select {
+		case castData := <-messageHandler.cast:
+			messageHandler.castHandler(castData)
 
-	fmt.Println("Launching server...")
-
-	// tls setting
-	cer, err := tls.LoadX509KeyPair("server.crt", "server.key")
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
-	//server start to listen on tls
-	config := &tls.Config{Certificates: []tls.Certificate{cer}}
-	ln, _ := tls.Listen(CONN_TYPE, DEFAULT_PORT, config)
-	defer ln.Close()
-	//ln, _ := net.Listen(CONN_TYPE, CONN_PORT)
-	//a := make (chan int)
-	go server.MessageReceiver()
-	i := 0
-	for {
-		//accept owns the flow until new client connected
-		conn, err := ln.Accept()
-		i=i+1
-		//a <- i
-		if err != nil {
-			fmt.Println(" Accepting a conneciton failed handling a client")
-			continue
 		}
-		go server.HandleClientConnection(conn)
-
 	}
-
-
 }
-func (server *Server) HandleClientConnection(conn net.Conn){
 
-	//stringArray := []string {"","",""}
-	//_ = stringArray
-	//temp := make([]byte, 128)
-	//_ = temp
+func (messageHandler *MessageHandler) castHandler (castData interface{}) {
+	//fmt.Println(" casthandler entered")
 
-
-	client := new(Client)
-	client.init(conn)
-
-
-	tlsconn := conn.(*tls.Conn)
-	err := tlsconn.Handshake()
-	if err != nil {
-		//client.Printf("TLS handshake failed: %v", err)
-		fmt.Println("TLS handshake failed: %v", err)
-		client.Disconnect()
-	}
-
-
-	state := tlsconn.ConnectionState()
-	if len(state.PeerCertificates) > 0 {
-		hash := sha1.New()
-		hash.Write(state.PeerCertificates[0].Raw)
-		sum := hash.Sum(nil)
-		client.certHash = hex.EncodeToString(sum)
-	}
-
-	version := &mumbleproto.Version{
-		Version:     proto.Uint32(0x10205),
-		Release:     proto.String("Murgo"),
-		CryptoModes: SupportedModes(),
-	}
-	err = client.sendMessage(version)
-	if err != nil {
-		//todo
-	}
-
-
-	client.cryptState.GenerateKey()
-	err = client.sendMessage(&mumbleproto.CryptSetup{
-		Key:         client.cryptState.key,
-		ClientNonce: client.cryptState.encryptIV,
-		ServerNonce: client.cryptState.decryptIV,
-	})
-	if err != nil{
-		fmt.Println("error sending msg")
-	}
-
-
-
-
-	for {
-		msg, err := client.readProtoMessage() // server ver
-		if err != nil {
-			if err == io.EOF {
-				client.Disconnect()
-			} else {
-				//client.Panicf("%v", err)
-			}
-			return
-		}
-		fmt.Println("received message type : ", msg.kind)
-		server.incoming<- msg
+	switch t := castData.(type) {
+	default:
+		fmt.Printf("unexpected type %T", t)
+	case *Message:
+		msg := castData.(*Message)
+		msg.MessageHandler()
 	}
 }
 
 
-func (server *Server) ReceivedMessageHandler (msg *Message) {
+
+
+func (msg *Message) MessageHandler() {
+	//fmt.Println(" handler entered")
 	switch msg.kind {
 	case mumbleproto.MessageAuthenticate:
-		server.HandleAuthenticate(msg)
+		msg.handleAuthenticate()
 
-	//case mumbleproto.MessagePing:
-	//	server.handlePingMessage(msg.client, msg)
+	case mumbleproto.MessagePing:
+		msg.handlePing()
 	//case mumbleproto.MessageChannelRemove:
 	//	server.handleChannelRemoveMessage(msg.client, msg)
 	//case mumbleproto.MessageChannelState:
 	//	server.handleChannelStateMessage(msg.client, msg)
 	case mumbleproto.MessageUserState:
-		server.HandleUserStateMessage(msg)
+		msg.handleUserState()
 	//case mumbleproto.MessageUserRemove:
 	//	server.handleUserRemoveMessage(msg.client, msg)
 	//case mumbleproto.MessageBanList:
@@ -181,22 +101,10 @@ func (server *Server) ReceivedMessageHandler (msg *Message) {
 	}
 }
 
-func (server *Server) MessageReceiver() {
-	fmt.Println("message receiver running")
-	for{
-		select {
-		case msg := <-server.incoming:
-			server.ReceivedMessageHandler(msg)
-		//case temp := <- a:
-		//	fmt.Println("Message receiver 2 ", temp)
-		}
-	}
-}
 
 
-////Authenticate message 를 받았 을 때 서버 작업
-func (server *Server) HandleAuthenticate(msg *Message) {
-
+////Authenticate message handling
+func (msg *Message) handleAuthenticate() {
 	//메시지 내용 출력 for test
 	authenticate := &mumbleproto.Authenticate{}
 	err := proto.Unmarshal(msg.buf, authenticate)
@@ -205,14 +113,18 @@ func (server *Server) HandleAuthenticate(msg *Message) {
 		return
 	}
 	fmt.Println("Athenticate info:", authenticate)
-	//////
 
+	// crypto setup
+	// Used to initialize and resync the UDP encryption. Either side may request a
+	// resync by sending the message without any values filled. The resync is
+	// performed by sending the message with only the client or server nonce
+	// filled.
 	client := msg.client
 	client.cryptState.GenerateKey()
 	err = client.sendMessage(&mumbleproto.CryptSetup{
-		Key:         client.cryptState.key,
-		ClientNonce: client.cryptState.encryptIV,
-		ServerNonce: client.cryptState.decryptIV,
+		Key:         client.cryptState.Key(),
+		ClientNonce: client.cryptState.EncryptIV(),
+		ServerNonce: client.cryptState.DecryptIV(),
 	})
 	if err != nil{
 		fmt.Println("error sending msg")
@@ -221,7 +133,6 @@ func (server *Server) HandleAuthenticate(msg *Message) {
 	if len(client.codecs) == 0 {
 		//todo : no codec msg case
 	}
-	fmt.Println("check point")
 	err = client.sendMessage(&mumbleproto.CodecVersion{
 		Alpha:       proto.Int32(0),
 		Beta:        proto.Int32(0),
@@ -235,13 +146,14 @@ func (server *Server) HandleAuthenticate(msg *Message) {
 	/// send channel state
 	channel := new(Channel)
 	channel.Id = 1
+	channel.Name = "myChannel"
 	chanstate := &mumbleproto.ChannelState{
 		ChannelId: proto.Uint32(uint32(channel.Id)),
 		Name:      proto.String(channel.Name),
 	}
 
 	chanstate.Parent = proto.Uint32(uint32(10))
-	chanstate.Description = proto.String(string("dd"))
+	chanstate.Description = proto.String(string("description"))
 
 	/*if channel.IsTemporary() {
 		chanstate.Temporary = proto.Bool(true)
@@ -291,16 +203,41 @@ func (server *Server) HandleAuthenticate(msg *Message) {
 		return
 	}
 
-
-
 }
 
-func (server *Server)HandleUserStateMessage(msg *Message)  {
+
+func (msg *Message)handleUserState()  {
+	fmt.Println("000000000000")
 	userState := &mumbleproto.UserState{}
 	err := proto.Unmarshal(msg.buf, userState)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("Userstate info:", userState)
+	fmt.Println("Userstate info:", userState ,"msg id : ", msg.testCounter)
 }
+
+
+func (msg *Message) handlePing() {
+	ping :=&mumbleproto.Ping{}
+	err := proto.Unmarshal(msg.buf, ping)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	//fmt.Println("ping info:", ping, "msg id : ", msg.testCounter)
+
+	client := msg.client
+	client.sendMessage(&mumbleproto.Ping{
+		Timestamp: ping.Timestamp,
+		Good:      proto.Uint32(1),
+		Late:      proto.Uint32(1),
+		Lost:      proto.Uint32(1),
+		Resync:    proto.Uint32(1),
+	})
+}
+
+
+
+
