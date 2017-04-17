@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"io"
@@ -13,8 +13,6 @@ type CryptState struct{
 	encryptIV []byte
 	decryptIV []byte
 }
-
-
 
 func (cryptState *CryptState) GenerateKey() error {
 
@@ -36,11 +34,20 @@ func (cryptState *CryptState) GenerateKey() error {
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 
+func (cryptState *CryptState)Key() ([]byte){
+	return cryptState.key
+}
 
+func (cryptState *CryptState)EncryptIV()([]byte){
+	return cryptState.encryptIV
+}
+
+func (cryptState *CryptState)DecryptIV()([]byte){
+	return cryptState.decryptIV
+}
 
 func SupportedModes() []string {
 	return []string{
