@@ -8,7 +8,6 @@ import (
 	"crypto/tls"
 	"log"
 	"github.com/golang/protobuf/proto"
-
 	"mumble.info/grumble/pkg/mumbleproto"
 	"murgo/config"
 	"mumble.info/grumble/pkg/sessionpool"
@@ -21,20 +20,7 @@ type TlsServer struct {
 	tlsConfig  *tls.Config
 	cast chan interface{}
 }
-/*
 
-type Server struct {
-	SID int64			//Server ID
-	incoming chan(*Message)
-	tlsConfig  *tls.Config
-
-
-
-	//usernames map[string]*User
-	//users  map[uint32]*User
-
-
-}*/
 
 func NewTlsServer(supervisor *Supervisor) (*TlsServer) {
 	tlsServer := new(TlsServer)
@@ -80,7 +66,7 @@ func (tlsServer *TlsServer) startTlsServer() (err error){
 	for {
 		select {
 		case castData := <-tlsServer.cast:
-			tlsServer.castHandler(castData)
+			tlsServer.handleCast(castData)
 		}
 		//accept owns the flow until new client connected
 	}
@@ -88,7 +74,6 @@ func (tlsServer *TlsServer) startTlsServer() (err error){
 
 
 func (tlsServer *TlsServer)handleIncomingClient (conn net.Conn){
-	fmt.Println("test2")
 
 	//init tls client
 	tlsClient := NewTlsClient(tlsServer.supervisor, conn)
@@ -108,23 +93,22 @@ func (tlsServer *TlsServer)handleIncomingClient (conn net.Conn){
 	if err != nil {
 		fmt.Println("Error sending message to client")
 	}
-	fmt.Println("test2")
 
 	//supervisor에서 클라이언트 고루틴 생성
 	tlsServer.supervisor.cast <- tlsClient.session
-	fmt.Println("test3")
 }
 
 
 
 
-func (tlsServer *TlsServer) castHandler (castData interface{}) {
+func (tlsServer *TlsServer) handleCast(castData interface{}) {
 
 	switch t := castData.(type) {
 	default:
 		fmt.Printf(" : unexpected type %T", t)
 
 	case uint32:
-		//Todo
+	//Todo
 	}
 }
+

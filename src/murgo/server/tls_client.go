@@ -12,6 +12,7 @@ import (
 	"mumble.info/grumble/pkg/mumbleproto"
 	"bufio"
 	"murgo/config"
+	"murgo/data"
 )
 
 
@@ -23,9 +24,7 @@ type TlsClient struct {
 
 	conn net.Conn
 	session uint32
-
-
-	pid  int64
+	channel *data.Channel
 
 	username string
 	server *TlsServer
@@ -34,8 +33,6 @@ type TlsClient struct {
 	tcpaddr *net.TCPAddr
 	certHash string
 
-
-
 	//client auth infomations
 	codecs []int32
 	tokens []string
@@ -43,12 +40,11 @@ type TlsClient struct {
 	//crypt state
 	cryptState *config.CryptState
 
-
-
-
-	//
+	//for test
 	testCounter int
 }
+
+// write 작업과 read 작업 구분 필요
 
 
 func NewTlsClient(supervisor *Supervisor, conn net.Conn) (*TlsClient){
@@ -77,12 +73,12 @@ func (tlsClient *TlsClient) startTlsClient(){
 
 		select {
 		case castData := <-tlsClient.cast:
-			tlsClient.castHandler(castData)
+			tlsClient.handleCast(castData)
 		}
 	}
 }
 
-func (tlsClient *TlsClient) castHandler (castData interface{}) {
+func (tlsClient *TlsClient) handleCast (castData interface{}) {
 
 	//tlsClient.readProtoMessage()
 }
@@ -135,7 +131,7 @@ func (tlsClient *TlsClient) sendMessage(msg interface{}) error {
 }
 
 //
-func (tlsClient *TlsClient) readProtoMessage() (msg *Message, err error) {
+func (tlsClient *TlsClient) readProtoMessage() (msg *data.Message, err error) {
 	var (
 		length uint32
 		kind   uint16
@@ -160,18 +156,25 @@ func (tlsClient *TlsClient) readProtoMessage() (msg *Message, err error) {
 		return
 	}
 	tlsClient.testCounter++
-	msg = &Message{
+
+	//todo : 메세지 상속
+	msg = &data.Message{}
+	/*{
 		buf:    buf,
 		kind:   kind,
 		client: tlsClient,
 		testCounter: tlsClient.testCounter,
-	}
+	}*/
+	msg.SetBuf(buf)
+	msg.SetClient(tlsClient)
+	msg.SetKind(kind)
+	msg.SetTestCounter(tlsClient.testCounter)
+
 
 	return msg, err
 }
 
 func (tlsClient *TlsClient) recvLoop (){
-
 	for {
 		msg, err := tlsClient.readProtoMessage()
 		if err != nil {
@@ -189,10 +192,12 @@ func (tlsClient *TlsClient) recvLoop (){
 }
 
 
-//TODO
 func (tlsClient *TlsClient) Disconnect() {
 
+}
 
+func (tlsClient *TlsClient) Session()(uint32) {
+	return tlsClient.session
 }
 
 

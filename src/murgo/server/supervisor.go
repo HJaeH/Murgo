@@ -16,7 +16,7 @@ import (
 type Supervisor struct {
 	sm *SessionManager
 	mh *MessageHandler
-	ch *ChannelManager
+	cm *ChannelManager
 	ts *TlsServer
 	tc map[uint32]*TlsClient
 
@@ -34,6 +34,7 @@ func NewSupervisor() (*Supervisor){
 
 	supervisor.mh = NewMessageHandler(supervisor)
 	supervisor.ts = NewTlsServer(supervisor)
+	supervisor.cm = NewChannelManager(supervisor)
 
 	return supervisor
 }
@@ -52,8 +53,7 @@ func (supervisor *Supervisor)StartSupervisor() {
 		select {
 		//supervisor cast channel로 session값이 오면 newclient
 		case castData := <-supervisor.cast:
-			fmt.Println("ddd")
-			supervisor.castHandler(castData)
+			supervisor.handleCast(castData)
 		default:
 		}
 	}
@@ -61,15 +61,13 @@ func (supervisor *Supervisor)StartSupervisor() {
 
 
 
-func (supervisor *Supervisor) castHandler (castData interface{}) {
+func (supervisor *Supervisor) handleCast (castData interface{}) {
 
-	fmt.Println("create client")
 
 	switch t := castData.(type) {
 	default:
 		fmt.Printf(" : unexpected type %T", t)
 	case uint32:
-		fmt.Println("create client")
 		session := castData.(uint32)
 		go supervisor.tc[session].startTlsClient()
 	}
