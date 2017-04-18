@@ -10,21 +10,22 @@ import (
 	"fmt"
 	"github.com/golang/protobuf/proto"
 	"mumble.info/grumble/pkg/mumbleproto"
-	"mumble.info/grumble/pkg/acl"
+	"murgo/data"
 )
 
 type MessageHandler struct {
 
 	supervisor *Supervisor
-	cast chan interface{}
+	cast chan interface{} // todo 동기, 비동기 요청 두가지 채널로 구분
+
 
 }
-type Message struct {
+/*ype Message struct {
 	buf    []byte
 	kind   uint16
 	client *TlsClient
 	testCounter int
-}
+}*/
 
 func NewMessageHandler(supervisor *Supervisor)( *MessageHandler){
 	messageHandler := new(MessageHandler)
@@ -36,44 +37,45 @@ func NewMessageHandler(supervisor *Supervisor)( *MessageHandler){
 
 
 func (messageHandler *MessageHandler) startMassageHandler(){
+
 	for{
 		select {
 		case castData := <-messageHandler.cast:
-			messageHandler.castHandler(castData)
+			messageHandler.handleCast(castData)
 
 		}
 	}
 }
 
-func (messageHandler *MessageHandler) castHandler (castData interface{}) {
-	//fmt.Println(" casthandler entered")
+func (messageHandler *MessageHandler) handleCast (castData interface{}) {
+	//fmt.Println(" cast handler entered")
 
 	switch t := castData.(type) {
 	default:
 		fmt.Printf("unexpected type %T", t)
-	case *Message:
-		msg := castData.(*Message)
-		msg.MessageHandler()
+	case *data.Message:
+		msg := castData.(*data.Message)
+		messageHandler.handleMassage(msg)
 	}
 }
 
 
 
 
-func (msg *Message) MessageHandler() {
+func (messageHandler *MessageHandler) handleMassage(msg *data.Message) {
 	//fmt.Println(" handler entered")
-	switch msg.kind {
+	switch msg.Kind() {
 	case mumbleproto.MessageAuthenticate:
-		msg.handleAuthenticate()
+		messageHandler.handleAuthenticate(msg)
 
 	case mumbleproto.MessagePing:
-		msg.handlePing()
+		messageHandler.handlePing(msg)
 	//case mumbleproto.MessageChannelRemove:
 	//	server.handleChannelRemoveMessage(msg.client, msg)
-	//case mumbleproto.MessageChannelState:
-	//	server.handleChannelStateMessage(msg.client, msg)
+	case mumbleproto.MessageChannelState:
+		messageHandler.handleChannelStateMessage(msg)
 	case mumbleproto.MessageUserState:
-		msg.handleUserState()
+		messageHandler.handleUserState(msg)
 	//case mumbleproto.MessageUserRemove:
 	//	server.handleUserRemoveMessage(msg.client, msg)
 	//case mumbleproto.MessageBanList:
@@ -104,10 +106,10 @@ func (msg *Message) MessageHandler() {
 
 
 ////Authenticate message handling
-func (msg *Message) handleAuthenticate() {
+func (messageHandler *MessageHandler) handleAuthenticate(msg *data.Message) {
 	//메시지 내용 출력 for test
 	authenticate := &mumbleproto.Authenticate{}
-	err := proto.Unmarshal(msg.buf, authenticate)
+	err := proto.Unmarshal(msg.Buf(), authenticate)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -119,7 +121,7 @@ func (msg *Message) handleAuthenticate() {
 	// resync by sending the message without any values filled. The resync is
 	// performed by sending the message with only the client or server nonce
 	// filled.
-	client := msg.client
+	client := msg.Client()
 	client.cryptState.GenerateKey()
 	err = client.sendMessage(&mumbleproto.CryptSetup{
 		Key:         client.cryptState.Key(),
@@ -144,7 +146,7 @@ func (msg *Message) handleAuthenticate() {
 		return
 	}
 	/// send channel state
-	channel := new(Channel)
+	channel := new(data.Channel)
 	channel.Id = 1
 	channel.Name = "myChannel"
 	chanstate := &mumbleproto.ChannelState{
@@ -206,21 +208,19 @@ func (msg *Message) handleAuthenticate() {
 }
 
 
-func (msg *Message)handleUserState()  {
-	fmt.Println("000000000000")
+func (messageHandler *MessageHandler)handleUserState(msg *data.Message) {
 	userState := &mumbleproto.UserState{}
-	err := proto.Unmarshal(msg.buf, userState)
+	err := proto.Unmarshal(msg.Buf(), userState)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("Userstate info:", userState ,"msg id : ", msg.testCounter)
+	fmt.Println("Userstate info:", userState ,"msg id : ", msg.TestCounter())
 }
 
-
-func (msg *Message) handlePing() {
+func (messageHandler *MessageHandler) handlePing(msg *data.Message) {
 	ping :=&mumbleproto.Ping{}
-	err := proto.Unmarshal(msg.buf, ping)
+	err := proto.Unmarshal(msg.Buf(), ping)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -228,7 +228,7 @@ func (msg *Message) handlePing() {
 
 	//fmt.Println("ping info:", ping, "msg id : ", msg.testCounter)
 
-	client := msg.client
+	client := msg.Client()
 	client.sendMessage(&mumbleproto.Ping{
 		Timestamp: ping.Timestamp,
 		Good:      proto.Uint32(1),
@@ -239,5 +239,6 @@ func (msg *Message) handlePing() {
 }
 
 
+func (messageHandler *MessageHandler) handleChannelStateMessage(msg *data.Message) {
 
-
+}
