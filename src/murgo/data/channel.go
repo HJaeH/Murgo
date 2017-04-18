@@ -63,7 +63,7 @@ func (channel *Channel) IsTemporary() bool {
 }
 
 func (channel *Channel) IsEmpty() bool {
-	return len(channel.clients) == 0
+	return (len(channel.clients) == 0)
 }
 /*
 
