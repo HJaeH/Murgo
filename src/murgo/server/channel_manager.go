@@ -146,4 +146,3 @@ func (channelManager *ChannelManager)channel(channelId int) (*Channel, error){
 
 
 
-

@@ -39,7 +39,6 @@ type TlsClient struct {
 	selfDeaf bool
 	selfMute bool
 
-
 	//client auth infomations
 	codecs []int32
 	tokens []string
@@ -191,7 +190,6 @@ func (tlsClient *TlsClient) readProtoMessage() (msg *Message, err error) {
 		return
 	}
 	tlsClient.testCounter++
-
 	msg = &Message{}
 	/*{
 		buf:    buf,
