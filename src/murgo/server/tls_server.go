@@ -94,7 +94,7 @@ func (tlsServer *TlsServer)handleIncomingClient (conn net.Conn){
 
 	//supervisor에서 클라이언트 고루틴 생성
 	//tlsServer.supervisor.Cast <- tlsClient.session
-	tlsServer.supervisor.genServer(tlsClient.recvLoop)
+	tlsServer.supervisor.startGenServer(tlsClient.recvLoop)
 }
 
 

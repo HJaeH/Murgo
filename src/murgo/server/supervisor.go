@@ -73,7 +73,7 @@ func (supervisor *Supervisor) handleCast (castData interface{}) {
 
 
 
-func (supervisor *Supervisor)genServer(F func()) {
+func (supervisor *Supervisor)startGenServer(genServer func()) {
 	fmt.Println("gen server started")
 
 	defer func(){
@@ -81,5 +81,5 @@ func (supervisor *Supervisor)genServer(F func()) {
 			fmt.Println("Fail to recover client")
 		}
 	}()
-	go F()
+	go genServer()
 }
