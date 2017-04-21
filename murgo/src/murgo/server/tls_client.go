@@ -12,20 +12,19 @@ import (
 	"mumble.info/grumble/pkg/mumbleproto"
 	"bufio"
 	"murgo/config"
-	"mumble.info/grumble/pkg/acl"
-	"fmt"
+	"murgo/data"
 )
 
 
 type TlsClient struct {
 	supervisor *Supervisor
+	cast chan interface{}
 
-	// 유저가 접속중인 channel
-	channel *Channel
 
 
 	conn net.Conn
 	session uint32
+	channel *data.Channel
 
 	username string
 	server *TlsServer
@@ -33,12 +32,6 @@ type TlsClient struct {
 
 	tcpaddr *net.TCPAddr
 	certHash string
-
-
-	//user's setting
-	selfDeaf bool
-	selfMute bool
-
 
 	//client auth infomations
 	codecs []int32
@@ -70,56 +63,28 @@ func NewTlsClient(supervisor *Supervisor, conn net.Conn) (*TlsClient){
 	tlsClient.reader = bufio.NewReader(tlsClient.conn)
 
 	tlsClient.testCounter = 0
-
-	// 기본으로 루트채널에 할당
-	tlsClient.channel = supervisor.cm.RootChannel()
 	return tlsClient
 }
 
-func (tlsClient *TlsClient) recvLoop( ){
+func (tlsClient *TlsClient) startTlsClient(){
+
+	go tlsClient.recvLoop()
 	for {
-		msg, err := tlsClient.readProtoMessage()
-		if err != nil {
-			if err != nil {
-				if err == io.EOF {
-					tlsClient.Disconnect()
-				} else {
-					//client.Panicf("%v", err)
-				}
-				return
-			}
+
+		select {
+		case castData := <-tlsClient.cast:
+			tlsClient.handleCast(castData)
 		}
-		tlsClient.supervisor.mh.Cast <- msg
-
 	}
+}
+
+func (tlsClient *TlsClient) handleCast (castData interface{}) {
+
+	//tlsClient.readProtoMessage()
 }
 
 
 
-const (
-	message uint16 = iota
-)
-
-func (tlsClient *TlsClient)handleCast( castData interface{}) {
-	murgoMsg := castData.(*MurgoMessage)
-
-	switch murgoMsg.kind {
-	default:
-		fmt.Printf("unexpected type")
-	case message:
-		tlsClient.sendMessage(murgoMsg.msg)
-	//todo
-	}
-
-
-
-}
-
-
-
-
-
-///// internal functions
 
 //send msg to client
 func (tlsClient *TlsClient) sendMessage(msg interface{}) error {
@@ -166,7 +131,7 @@ func (tlsClient *TlsClient) sendMessage(msg interface{}) error {
 }
 
 //
-func (tlsClient *TlsClient) readProtoMessage() (msg *Message, err error) {
+func (tlsClient *TlsClient) readProtoMessage() (msg *data.Message, err error) {
 	var (
 		length uint32
 		kind   uint16
@@ -192,7 +157,8 @@ func (tlsClient *TlsClient) readProtoMessage() (msg *Message, err error) {
 	}
 	tlsClient.testCounter++
 
-	msg = &Message{}
+	//todo : 메세지 상속
+	msg = &data.Message{}
 	/*{
 		buf:    buf,
 		kind:   kind,
@@ -208,6 +174,23 @@ func (tlsClient *TlsClient) readProtoMessage() (msg *Message, err error) {
 	return msg, err
 }
 
+func (tlsClient *TlsClient) recvLoop (){
+	for {
+		msg, err := tlsClient.readProtoMessage()
+		if err != nil {
+			if err != nil {
+				if err == io.EOF {
+					tlsClient.Disconnect()
+				} else {
+					//client.Panicf("%v", err)
+				}
+				return
+			}
+		}
+		tlsClient.supervisor.mh.cast <- msg
+	}
+}
+
 
 func (tlsClient *TlsClient) Disconnect() {
 
@@ -219,21 +202,3 @@ func (tlsClient *TlsClient) Session()(uint32) {
 
 
 
-// Send permission denied by who, what, where
-func (tlsClient *TlsClient)sendPermissionDenied(who *TlsClient, where *Channel, what acl.Permission) {
-	pd := &mumbleproto.PermissionDenied{
-		Permission: proto.Uint32(uint32(what)),
-		ChannelId:  proto.Uint32(uint32(where.Id)),
-		Session:    proto.Uint32(who.Session()),
-		Type:       mumbleproto.PermissionDenied_Permission.Enum(),
-	}
-	err := tlsClient.sendMessage(pd)
-	if err != nil {
-		//tlsClient.Panicf("%v", err.Error())
-		return
-	}
-}
-
-func (tlsClient *TlsClient) enterChannel(channel *Channel){
-	tlsClient.channel = channel
-}
