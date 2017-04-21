@@ -20,6 +20,7 @@ type ChannelManager struct {
 
 
 
+
 func NewChannelManager(supervisor *Supervisor)(*ChannelManager){
 
 	channelManager := new(ChannelManager)
@@ -131,18 +132,6 @@ func (channelManager *ChannelManager)channel(channelId int) (*Channel, error){
 
 	return nil, errors.New("Channel ID in invalid in channel list")
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

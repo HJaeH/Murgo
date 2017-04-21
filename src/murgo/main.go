@@ -10,7 +10,6 @@ package main
 
 import "murgo/server"
 
-
 func main() {
 
 	supervisor := server.NewSupervisor()

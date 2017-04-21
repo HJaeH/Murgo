@@ -10,11 +10,13 @@ import (
 	"fmt"
 	"github.com/golang/protobuf/proto"
 	"mumble.info/grumble/pkg/mumbleproto"
+
 )
 
 type MessageHandler struct {
 
 	supervisor *Supervisor
+
 	Cast chan interface{} // todo 동기, 비동기 요청 두가지 채널로 구분
 	Call chan interface{}
 
@@ -58,6 +60,7 @@ func (messageHandler *MessageHandler) handleCast (castData interface{}) {
 
 func (messageHandler *MessageHandler) handleMassage(msg *Message) {
 
+
 	//fmt.Println(" handler entered")
 	switch msg.Kind() {
 	case mumbleproto.MessageAuthenticate:
@@ -100,6 +103,7 @@ func (messageHandler *MessageHandler) handleMassage(msg *Message) {
 
 ////Authenticate message handling
 func (messageHandler *MessageHandler) handleAuthenticate(msg *Message) {
+
 	//메시지 내용 출력 for test
 	authenticate := &mumbleproto.Authenticate{}
 	err := proto.Unmarshal(msg.Buf(), authenticate)
@@ -224,6 +228,7 @@ func (messageHandler *MessageHandler) handlePing(msg *Message) {
 
 
 
+
 func (messageHandler *MessageHandler) handleChannelStateMessage(msg *Message) {
 
 }
@@ -273,5 +278,3 @@ func (messageHandler *MessageHandler) handleUserState(msg *Message) {
 	}
 
 }
-
-

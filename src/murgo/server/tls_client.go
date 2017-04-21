@@ -49,7 +49,6 @@ type TlsClient struct {
 
 	//for test
 	testCounter int
-
 }
 
 // write 작업과 read 작업 구분 필요
@@ -111,6 +110,7 @@ func (tlsClient *TlsClient)handleCast( castData interface{}) {
 		tlsClient.sendMessage(murgoMsg.msg)
 	//todo
 	}
+
 
 
 }

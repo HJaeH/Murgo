@@ -20,6 +20,7 @@ type TlsServer struct {
 	Cast chan interface{}
 	Call chan interface{}
 
+
 }
 
 
@@ -36,6 +37,7 @@ func (tlsServer *TlsServer) startTlsServer() (err error){
 	fmt.Println("TlsServer stated")
 	// tls setting
 	cer, err := tls.LoadX509KeyPair("./src/murgo/config/server.crt", "./src/murgo/config/server.key")
+
 	if err != nil {
 		log.Println(err)
 		return
@@ -64,6 +66,7 @@ func (tlsServer *TlsServer) startTlsServer() (err error){
 	for {
 		select {
 		case castData := <-tlsServer.Cast:
+
 			tlsServer.handleCast(castData)
 		}
 		//accept owns the flow until new client connected
@@ -95,6 +98,7 @@ func (tlsServer *TlsServer)handleIncomingClient (conn net.Conn){
 	//supervisor에서 클라이언트 고루틴 생성
 	//tlsServer.supervisor.Cast <- tlsClient.session
 	tlsServer.supervisor.startGenServer(tlsClient.recvLoop)
+
 }
 
 
