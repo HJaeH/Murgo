@@ -8,9 +8,9 @@
 
 package main
 
-import (
-	"murgo/server"
-)
+import "murgo/server"
+
+
 func main() {
 
 	supervisor := server.NewSupervisor()

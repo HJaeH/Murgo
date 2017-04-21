@@ -10,37 +10,33 @@ import (
 	"fmt"
 	"github.com/golang/protobuf/proto"
 	"mumble.info/grumble/pkg/mumbleproto"
-	"murgo/data"
 )
 
 type MessageHandler struct {
 
 	supervisor *Supervisor
-	cast chan interface{} // todo 동기, 비동기 요청 두가지 채널로 구분
+	Cast chan interface{} // todo 동기, 비동기 요청 두가지 채널로 구분
+	Call chan interface{}
 
 
 }
-/*ype Message struct {
-	buf    []byte
-	kind   uint16
-	client *TlsClient
-	testCounter int
-}*/
+
 
 func NewMessageHandler(supervisor *Supervisor)( *MessageHandler){
 	messageHandler := new(MessageHandler)
 	messageHandler.supervisor = supervisor
 
-	messageHandler.cast = make( chan interface{})
+	messageHandler.Cast = make( chan interface{})
 	return messageHandler
 }
 
 
 func (messageHandler *MessageHandler) startMassageHandler(){
+	fmt.Println("Message Handler stated")
 
 	for{
 		select {
-		case castData := <-messageHandler.cast:
+		case castData := <-messageHandler.Cast:
 			messageHandler.handleCast(castData)
 
 		}
@@ -53,16 +49,15 @@ func (messageHandler *MessageHandler) handleCast (castData interface{}) {
 	switch t := castData.(type) {
 	default:
 		fmt.Printf("unexpected type %T", t)
-	case *data.Message:
-		msg := castData.(*data.Message)
+	case *Message:
+		msg := castData.(*Message)
 		messageHandler.handleMassage(msg)
+
 	}
 }
 
+func (messageHandler *MessageHandler) handleMassage(msg *Message) {
 
-
-
-func (messageHandler *MessageHandler) handleMassage(msg *data.Message) {
 	//fmt.Println(" handler entered")
 	switch msg.Kind() {
 	case mumbleproto.MessageAuthenticate:
@@ -103,10 +98,8 @@ func (messageHandler *MessageHandler) handleMassage(msg *data.Message) {
 	}
 }
 
-
-
 ////Authenticate message handling
-func (messageHandler *MessageHandler) handleAuthenticate(msg *data.Message) {
+func (messageHandler *MessageHandler) handleAuthenticate(msg *Message) {
 	//메시지 내용 출력 for test
 	authenticate := &mumbleproto.Authenticate{}
 	err := proto.Unmarshal(msg.Buf(), authenticate)
@@ -146,7 +139,7 @@ func (messageHandler *MessageHandler) handleAuthenticate(msg *data.Message) {
 		return
 	}
 	/// send channel state
-	channel := new(data.Channel)
+	channel := new(Channel)
 	channel.Id = 1
 	channel.Name = "myChannel"
 	chanstate := &mumbleproto.ChannelState{
@@ -208,17 +201,8 @@ func (messageHandler *MessageHandler) handleAuthenticate(msg *data.Message) {
 }
 
 
-func (messageHandler *MessageHandler)handleUserState(msg *data.Message) {
-	userState := &mumbleproto.UserState{}
-	err := proto.Unmarshal(msg.Buf(), userState)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	fmt.Println("Userstate info:", userState ,"msg id : ", msg.TestCounter())
-}
 
-func (messageHandler *MessageHandler) handlePing(msg *data.Message) {
+func (messageHandler *MessageHandler) handlePing(msg *Message) {
 	ping :=&mumbleproto.Ping{}
 	err := proto.Unmarshal(msg.Buf(), ping)
 	if err != nil {
@@ -239,6 +223,55 @@ func (messageHandler *MessageHandler) handlePing(msg *data.Message) {
 }
 
 
-func (messageHandler *MessageHandler) handleChannelStateMessage(msg *data.Message) {
+
+func (messageHandler *MessageHandler) handleChannelStateMessage(msg *Message) {
 
 }
+
+func (messageHandler *MessageHandler) handleUserState(msg *Message) {
+	// 메시지를 보낸 유저 reset idle -> 이 부분은 통합
+	userstate := &mumbleproto.UserState{}
+	//messageHandler.supervisor.tc[1].handleCast()
+	err := proto.Unmarshal(msg.buf, userstate)
+	if err != nil {
+		//
+		return
+	}
+	clients := messageHandler.supervisor.tc
+	channelManager := messageHandler.supervisor.cm
+
+	actor, ok := clients[msg.Client().Session()]
+	if !ok {
+		//server.Panic("Client not found in server's client map.")
+		return
+	}
+
+	//actor는 메시지를 보낸 클라이언트
+	//target은 메세지 패킷의 session
+	target := actor
+	if userstate.Session != nil {
+		// target -> 메시지의 session에 해당하는 client 메시지의 대상. sender일 수도 있고 아닐 수도 있다
+		target, ok = clients[*userstate.Session]
+		if !ok {
+			//client.Panic("Invalid session in UserState message")
+			return
+		}
+	}
+
+	userstate.Session = proto.Uint32(target.Session())
+	userstate.Actor = proto.Uint32(actor.Session())
+
+
+	//Channel ID 필드 값이 있는 경우
+	if userstate.ChannelId != nil {
+		channel, ok := channelManager.channelList[int(*userstate.ChannelId)]
+		if ok {
+			channelManager.Cast <- &MurgoMessage{kind:enterChannel, channel:channel }
+
+			//broadcast = true
+		}
+	}
+
+}
+
+

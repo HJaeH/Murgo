@@ -1,15 +1,22 @@
-package data
-
-import (
-	"murgo/server"
-)
+package server
 
 type Message struct {
 	buf    []byte
 	kind   uint16
-	client *server.TlsClient
+	client *TlsClient
 	testCounter int
 }
+
+type MurgoMessage struct {
+	kind uint16
+	channelID int
+	client *TlsClient
+	channel *Channel
+	msg *Message
+	ChannelName string
+}
+
+
 
 
 func (message *Message)SetBuf(buf []byte){
@@ -19,7 +26,7 @@ func (message *Message)SetBuf(buf []byte){
 func (message *Message)SetKind(kind uint16){
 	message.kind = kind
 }
-func (message *Message)SetClient(client *server.TlsClient){
+func (message *Message)SetClient(client *TlsClient){
 	message.client = client
 }
 func (message *Message)SetTestCounter(testCounter int){
@@ -35,7 +42,7 @@ func (message *Message)Kind ()(uint16){
 	return message.kind
 }
 
-func (message *Message)Client ()(*server.TlsClient){
+func (message *Message)Client ()(*TlsClient){
 	return message.client
 }
 

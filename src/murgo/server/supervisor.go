@@ -20,15 +20,15 @@ type Supervisor struct {
 	ts *TlsServer
 	tc map[uint32]*TlsClient
 
-	cast chan interface{}
+	Cast chan interface{}
+	Call chan interface{}
+
 
 }
 
-//supervisor를 루트로 하는 double linked의 tree형태.
-//4개의 고루틴을 실행시킨다
 func NewSupervisor() (*Supervisor){
 	supervisor := new(Supervisor)
-	supervisor.cast = make(chan interface{})
+	supervisor.Cast = make(chan interface{})
 	supervisor.tc = make( map[uint32]*TlsClient)
 
 
@@ -47,12 +47,10 @@ func (supervisor *Supervisor)StartSupervisor() {
 	go supervisor.mh.startMassageHandler() // rumble_server 같은 역할
 	go supervisor.ts.startTlsServer()
 
-	//var a = 10
 	for{
-		//supervisor.cast <- a
 		select {
 		//supervisor cast channel로 session값이 오면 newclient
-		case castData := <-supervisor.cast:
+		case castData := <-supervisor.Cast:
 			supervisor.handleCast(castData)
 		default:
 		}
@@ -63,12 +61,25 @@ func (supervisor *Supervisor)StartSupervisor() {
 
 func (supervisor *Supervisor) handleCast (castData interface{}) {
 
-
 	switch t := castData.(type) {
 	default:
 		fmt.Printf(" : unexpected type %T", t)
-	case uint32:
+	/*case uint32:
 		session := castData.(uint32)
-		go supervisor.tc[session].startTlsClient()
+		go supervisor.tc[session].startTlsClient()*/
 	}
+
+}
+
+
+
+func (supervisor *Supervisor)genServer(F func()) {
+	fmt.Println("gen server started")
+
+	defer func(){
+		if err:= recover(); err!= nil{
+			fmt.Println("Fail to recover client")
+		}
+	}()
+	go F()
 }

@@ -2,18 +2,23 @@ package server
 
 import (
 	"fmt"
-	"murgo/data"
 )
 
 type SessionManager struct {
 	supervisor *Supervisor
-	cast chan interface{}
+	clientList map[uint32] *TlsClient
+
+
+
+	Cast chan interface{}
+	Call chan interface{}
+
 }
 
 
 func NewSessionManager (supervisor *Supervisor)(*SessionManager) {
 	sessionManager := new(SessionManager)
-	sessionManager.cast = make(chan interface{})
+	sessionManager.Cast = make(chan interface{})
 	sessionManager.supervisor = supervisor
 
 	return sessionManager
@@ -22,7 +27,7 @@ func NewSessionManager (supervisor *Supervisor)(*SessionManager) {
 func (sessionManager *SessionManager)startSessionManager(supervisor *Supervisor) {
 	for{
 		select {
-		case castData := <-sessionManager.cast:
+		case castData := <-sessionManager.Cast:
 			sessionManager.handleCast(castData)
 
 		}
@@ -35,7 +40,7 @@ func (sessionManager *SessionManager)handleCast (castData interface{}) {
 	switch t := castData.(type) {
 	default:
 		fmt.Printf("unexpected type %T", t)
-	case *data.Message:
+	case *Message:
 	//todo
 	}
 }

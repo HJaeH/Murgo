@@ -1,8 +1,4 @@
-package data
-
-import (
-	"murgo/server"
-)
+package server
 
 type Channel struct {
 	Id       int
@@ -10,7 +6,7 @@ type Channel struct {
 	Position int
 
 	temporary bool
-	clients   map[uint32]*server.TlsClient
+	clients   map[uint32]*TlsClient
 	parent    *Channel
 	children  map[int]*Channel
 
@@ -19,11 +15,14 @@ type Channel struct {
 
 }
 
+
+
+
 func NewChannel(id int, name string) (channel *Channel) {
 	channel = new(Channel)
 	channel.Id = id
 	channel.Name = name
-	channel.clients = make(map[uint32]*server.TlsClient)
+	channel.clients = make(map[uint32]*TlsClient)
 	channel.children = make(map[int]*Channel)
 	channel.Links = make(map[int]*Channel)
 	return
@@ -65,6 +64,13 @@ func (channel *Channel) IsTemporary() bool {
 func (channel *Channel) IsEmpty() bool {
 	return (len(channel.clients) == 0)
 }
+
+func (channel *Channel) addClient(client *TlsClient){
+	channel.clients[client.Session()] = client
+	client.channel = channel
+}
+
+
 /*
 
 func (channel *Channel) AddClient(client *server.TlsClient) {
