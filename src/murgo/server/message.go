@@ -12,7 +12,7 @@ type MurgoMessage struct {
 	channelID int
 	client *TlsClient
 	channel *Channel
-	msg *Message
+	msg interface{}
 	ChannelName string
 }
 

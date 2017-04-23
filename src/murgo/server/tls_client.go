@@ -22,6 +22,7 @@ type TlsClient struct {
 
 	// 유저가 접속중인 channel
 	channel *Channel
+	channelID uint32
 
 
 	conn net.Conn
@@ -76,7 +77,7 @@ func NewTlsClient(supervisor *Supervisor, conn net.Conn) (*TlsClient){
 	return tlsClient
 }
 
-func (tlsClient *TlsClient) recvLoop( ){
+func (tlsClient *TlsClient) recvLoop(){
 	for {
 		msg, err := tlsClient.readProtoMessage()
 		if err != nil {
@@ -94,10 +95,9 @@ func (tlsClient *TlsClient) recvLoop( ){
 	}
 }
 
-
-
 const (
 	message uint16 = iota
+
 )
 
 func (tlsClient *TlsClient)handleCast( castData interface{}) {
@@ -123,6 +123,8 @@ func (tlsClient *TlsClient)handleCast( castData interface{}) {
 
 //send msg to client
 func (tlsClient *TlsClient) sendMessage(msg interface{}) error {
+
+
 	buf := new(bytes.Buffer)
 	var (
 		kind    uint16
@@ -236,4 +238,41 @@ func (tlsClient *TlsClient)sendPermissionDenied(who *TlsClient, where *Channel, 
 
 func (tlsClient *TlsClient) enterChannel(channel *Channel){
 	tlsClient.channel = channel
+}
+//
+//func (client *TlsClient) sendChannelList() {
+//	client.sendChannelTree(client.server.RootChannel())
+//}
+
+func (client *TlsClient) sendChannelTree(channel *Channel) {
+	chanstate := &mumbleproto.ChannelState{
+		ChannelId: proto.Uint32(uint32(channel.Id)),
+		Name:      proto.String(channel.Name),
+	}
+	if channel.parent != nil {
+		chanstate.Parent = proto.Uint32(uint32(channel.parent.Id))
+	}
+
+
+
+	if channel.IsTemporary() {
+		chanstate.Temporary = proto.Bool(true)
+	}
+
+	chanstate.Position = proto.Int32(int32(channel.Position))
+
+	links := []uint32{}
+	for cid, _ := range channel.Links {
+		links = append(links, uint32(cid))
+	}
+	chanstate.Links = links
+
+	err := client.sendMessage(chanstate)
+	if err != nil {
+		//client.Panicf("%v", err)
+	}
+
+	for _, subchannel := range channel.children {
+		client.sendChannelTree(subchannel)
+	}
 }

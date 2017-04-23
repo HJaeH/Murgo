@@ -14,16 +14,21 @@ type ChannelManager struct {
 
 	Cast chan interface{}
 	Call chan interface{}
+
+	rootChannel *Channel
 }
 
 
 
 
-
+const ROOT_CHANNEL = 0
 
 func NewChannelManager(supervisor *Supervisor)(*ChannelManager){
 
 	channelManager := new(ChannelManager)
+
+	channelManager.rootChannel = new(Channel)
+	channelManager.rootChannel.Id = ROOT_CHANNEL
 
 
 	channelManager.Cast = make(chan interface{})
@@ -56,6 +61,7 @@ func (channelManager *ChannelManager)startChannelManager(supervisor *Supervisor)
 const (
 	addChannel uint16 = iota
 	enterChannel
+	broadCastChannel
 )
 
 
@@ -73,7 +79,6 @@ func (channelManager *ChannelManager)handleCast( castData interface{}) {
 	}
 }
 
-//switch t := castData.(type) {
 
 
 // APIs
@@ -94,6 +99,7 @@ func (channelManager *ChannelManager) RootChannel()(*Channel) {
 
 func (channelManager *ChannelManager) enterChannel(client *TlsClient, channel *Channel) {
 	channel.addClient(client)
+
 }
 
 

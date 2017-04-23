@@ -10,13 +10,12 @@ type Channel struct {
 	parent    *Channel
 	children  map[int]*Channel
 
+
+	rootChannel *ChannelManager
 	// Links
 	Links map[int]*Channel
 
 }
-
-
-
 
 func NewChannel(id int, name string) (channel *Channel) {
 	channel = new(Channel)
@@ -26,6 +25,11 @@ func NewChannel(id int, name string) (channel *Channel) {
 	channel.children = make(map[int]*Channel)
 	channel.Links = make(map[int]*Channel)
 	return
+}
+
+
+func (channel *Channel)startChannel(){
+
 }
 
 func (channel *Channel) AddChild(child *Channel) {
@@ -70,19 +74,3 @@ func (channel *Channel) addClient(client *TlsClient){
 	client.channel = channel
 }
 
-
-/*
-
-func (channel *Channel) AddClient(client *server.TlsClient) {
-	channel.clients[client.Session()] = client
-	client.Channel = channel
-}
-
-func (channel *Channel) RemoveClient(client *Client) {
-	delete(channel.clients, client.Session())
-	client.Channel = nil
-}
-*/
-
-
-//

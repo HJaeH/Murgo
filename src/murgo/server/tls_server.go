@@ -63,14 +63,14 @@ func (tlsServer *TlsServer) startTlsServer() (err error){
 		}
 	}()
 
-	for {
+	/*for {
 		select {
 		case castData := <-tlsServer.Cast:
 
 			tlsServer.handleCast(castData)
 		}
 		//accept owns the flow until new client connected
-	}
+	}*/
 }
 
 
@@ -78,7 +78,6 @@ func (tlsServer *TlsServer)handleIncomingClient (conn net.Conn){
 
 	//init tls client
 	tlsClient := NewTlsClient(tlsServer.supervisor, conn)
-
 	if tlsServer.supervisor.tc[tlsClient.session] != nil {
 		// todo
 	}
@@ -97,9 +96,11 @@ func (tlsServer *TlsServer)handleIncomingClient (conn net.Conn){
 
 	//supervisor에서 클라이언트 고루틴 생성
 	//tlsServer.supervisor.Cast <- tlsClient.session
-	tlsServer.supervisor.startGenServer(tlsClient.recvLoop)
+	tlsServer.supervisor.startGenServer(tlsClient.recvLoop) //
+	//fmt.Println("is routine blocked?")
 
 }
+/*
 
 
 
@@ -115,3 +116,4 @@ func (tlsServer *TlsServer) handleCast(castData interface{}) {
 	}
 }
 
+*/

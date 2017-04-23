@@ -17,7 +17,7 @@ type MessageHandler struct {
 
 	supervisor *Supervisor
 
-	Cast chan interface{} // todo 동기, 비동기 요청 두가지 채널로 구분
+	Cast chan interface{}
 	Call chan interface{}
 
 
@@ -74,30 +74,30 @@ func (messageHandler *MessageHandler) handleMassage(msg *Message) {
 		messageHandler.handleChannelStateMessage(msg)
 	case mumbleproto.MessageUserState:
 		messageHandler.handleUserState(msg)
-	//case mumbleproto.MessageUserRemove:
-	//	server.handleUserRemoveMessage(msg.client, msg)
-	//case mumbleproto.MessageBanList:
-	//	server.handleBanListMessage(msg.client, msg)
-	//case mumbleproto.MessageTextMessage:
-	//	server.handleTextMessage(msg.client, msg)
-	//case mumbleproto.MessageACL:
-	//	server.handleAclMessage(msg.client, msg)
-	//case mumbleproto.MessageQueryUsers:
-	//	server.handleQueryUsers(msg.client, msg)
-	//case mumbleproto.MessageCryptSetup:
-	//	server.handleCryptSetup(msg.client, msg)
-	//case mumbleproto.MessageContextAction:
-	//	server.Printf("MessageContextAction from client")
-	//case mumbleproto.MessageUserList:
-	//	server.handleUserList(msg.client, msg)
-	//case mumbleproto.MessageVoiceTarget:
-	//	server.handleVoiceTarget(msg.client, msg)
-	//case mumbleproto.MessagePermissionQuery:
-	//	server.handlePermissionQuery(msg.client, msg)
-	//case mumbleproto.MessageUserStats:
-	//	server.handleUserStatsMessage(msg.client, msg)
-	//case mumbleproto.MessageRequestBlob:
-	//	server.handleRequestBlob(msg.client, msg)
+	case mumbleproto.MessageUserRemove:
+		messageHandler.handleUserRemoveMessage(msg)
+	case mumbleproto.MessageBanList:
+		messageHandler.handleBanListMessage(msg)
+	case mumbleproto.MessageTextMessage:
+		messageHandler.handleTextMessage(msg)
+	case mumbleproto.MessageACL:
+		messageHandler.handleAclMessage(msg)
+	case mumbleproto.MessageQueryUsers:
+		messageHandler.handleQueryUsers(msg)
+	case mumbleproto.MessageCryptSetup:
+		messageHandler.handleCryptSetup(msg)
+	case mumbleproto.MessageContextAction:
+		fmt.Print("MessageContextAction from client")
+	case mumbleproto.MessageUserList:
+		messageHandler.handleUserList(msg)
+	case mumbleproto.MessageVoiceTarget:
+		messageHandler.handleVoiceTarget(msg)
+	case mumbleproto.MessagePermissionQuery:
+		messageHandler.handlePermissionQuery(msg)
+	case mumbleproto.MessageUserStats:
+		messageHandler.handleUserStatsMessage(msg)
+	case mumbleproto.MessageRequestBlob:
+		messageHandler.handleRequestBlob(msg)
 	}
 }
 
@@ -111,13 +111,9 @@ func (messageHandler *MessageHandler) handleAuthenticate(msg *Message) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("Athenticate info:", authenticate)
+	fmt.Println("Authenticate info:", authenticate)
 
 	// crypto setup
-	// Used to initialize and resync the UDP encryption. Either side may request a
-	// resync by sending the message without any values filled. The resync is
-	// performed by sending the message with only the client or server nonce
-	// filled.
 	client := msg.Client()
 	client.cryptState.GenerateKey()
 	err = client.sendMessage(&mumbleproto.CryptSetup{
@@ -132,12 +128,20 @@ func (messageHandler *MessageHandler) handleAuthenticate(msg *Message) {
 	if len(client.codecs) == 0 {
 		//todo : no codec msg case
 	}
+
+
+	//send code version
 	err = client.sendMessage(&mumbleproto.CodecVersion{
 		Alpha:       proto.Int32(0),
 		Beta:        proto.Int32(0),
 		PreferAlpha: proto.Bool(true),
 		Opus:        proto.Bool(true),
 	})
+
+
+
+
+
 	if err != nil {
 		//server.Printf("Unable to broadcast.")
 		return
@@ -149,8 +153,8 @@ func (messageHandler *MessageHandler) handleAuthenticate(msg *Message) {
 	chanstate := &mumbleproto.ChannelState{
 		ChannelId: proto.Uint32(uint32(channel.Id)),
 		Name:      proto.String(channel.Name),
+		Description: proto.String("dd"),
 	}
-
 	chanstate.Parent = proto.Uint32(uint32(10))
 	chanstate.Description = proto.String(string("description"))
 
@@ -173,10 +177,25 @@ func (messageHandler *MessageHandler) handleAuthenticate(msg *Message) {
 		// todo
 	}
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 	userstate := &mumbleproto.UserState{
-		Session:   proto.Uint32(0),//client.Session()
-		Name:      proto.String("user"), //client.ShownName()
-		ChannelId: proto.Uint32(uint32(channel.Id)),
+		Session:   proto.Uint32(client.Session()),//client.Session()
+		Name:      proto.String(client.username), //client.ShownName()
+		ChannelId: proto.Uint32(client.channelID),
 	}
 	if err := client.sendMessage(userstate); err != nil {
 		//client.Panicf("%v", err)
@@ -207,6 +226,10 @@ func (messageHandler *MessageHandler) handleAuthenticate(msg *Message) {
 
 
 func (messageHandler *MessageHandler) handlePing(msg *Message) {
+
+
+
+
 	ping :=&mumbleproto.Ping{}
 	err := proto.Unmarshal(msg.Buf(), ping)
 	if err != nil {
@@ -214,7 +237,7 @@ func (messageHandler *MessageHandler) handlePing(msg *Message) {
 		return
 	}
 
-	//fmt.Println("ping info:", ping, "msg id : ", msg.testCounter)
+	fmt.Println("ping info:", ping, "msg id : ", msg.testCounter)
 
 	client := msg.Client()
 	client.sendMessage(&mumbleproto.Ping{
@@ -229,11 +252,12 @@ func (messageHandler *MessageHandler) handlePing(msg *Message) {
 
 
 
-func (messageHandler *MessageHandler) handleChannelStateMessage(msg *Message) {
 
-}
 
 func (messageHandler *MessageHandler) handleUserState(msg *Message) {
+
+
+
 	// 메시지를 보낸 유저 reset idle -> 이 부분은 통합
 	userstate := &mumbleproto.UserState{}
 	//messageHandler.supervisor.tc[1].handleCast()
@@ -242,6 +266,8 @@ func (messageHandler *MessageHandler) handleUserState(msg *Message) {
 		//
 		return
 	}
+	fmt.Println("userstate info:", userstate, "msg id :",msg.testCounter)
+
 	clients := messageHandler.supervisor.tc
 	channelManager := messageHandler.supervisor.cm
 
@@ -265,16 +291,151 @@ func (messageHandler *MessageHandler) handleUserState(msg *Message) {
 
 	userstate.Session = proto.Uint32(target.Session())
 	userstate.Actor = proto.Uint32(actor.Session())
-
-
+	fmt.Println(userstate.ChannelId == nil)
+	channel, ok := channelManager.channelList[int(*userstate.ChannelId)]
 	//Channel ID 필드 값이 있는 경우
 	if userstate.ChannelId != nil {
-		channel, ok := channelManager.channelList[int(*userstate.ChannelId)]
 		if ok {
-			channelManager.Cast <- &MurgoMessage{kind:enterChannel, channel:channel }
+			channelManager.Cast <- &MurgoMessage{kind:enterChannel, channel:channel, client:target }
 
 			//broadcast = true
 		}
+	} else {
+		if target.channel.Id == ROOT_CHANNEL {
+			// todo : mic and speaker check
+			//tempMsg =
+		}
 	}
 
+	newMsg := &mumbleproto.UserState{Deaf:proto.Bool(false), SelfDeaf:proto.Bool(false), Name:userstate.Name}
+	channelManager.Cast<- &MurgoMessage{kind:broadCastChannel, channel:channel, msg:newMsg}
+
+
 }
+
+func (messageHandler *MessageHandler)handleUserRemoveMessage (msg *Message){
+
+	msgProto := &mumbleproto.UserRemove{}
+	err := proto.Unmarshal(msg.Buf(), msgProto)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("Banlistmessage info:", msgProto)
+}
+
+func (messageHandler *MessageHandler) handleChannelStateMessage(msg *Message) {
+
+	msgProto := &mumbleproto.ChannelState{}
+	err := proto.Unmarshal(msg.Buf(), msgProto)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("ChannelState info:", msgProto)
+
+}
+func (messageHandler *MessageHandler)handleBanListMessage(msg *Message) {
+
+	msgProto := &mumbleproto.BanList{}
+	err := proto.Unmarshal(msg.Buf(), msgProto)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("Banlistmessage info:", msgProto)
+}
+func (messageHandler *MessageHandler) handleTextMessage(msg *Message) {
+	msgProto := &mumbleproto.TextMessage{}
+	err := proto.Unmarshal(msg.Buf(), msgProto)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("Text msg info:", msgProto)
+
+}
+func (messageHandler *MessageHandler)handleAclMessage(msg *Message) {
+	msgProto := &mumbleproto.ACL{}
+	err := proto.Unmarshal(msg.Buf(), msgProto)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("ACL info:", msgProto)
+
+}
+func (messageHandler *MessageHandler)handleQueryUsers(msg *Message) {
+	msgProto := &mumbleproto.QueryUsers{}
+	err := proto.Unmarshal(msg.Buf(), msgProto)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("Banlistmessage info:", msgProto)
+
+}
+func (messageHandler *MessageHandler)handleCryptSetup(msg *Message) {
+	msgProto := &mumbleproto.CryptSetup{}
+	err := proto.Unmarshal(msg.Buf(), msgProto)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("Banlistmessage info:", msgProto)
+
+}
+func (messageHandler *MessageHandler)handleUserList(msg *Message) {
+	msgProto := &mumbleproto.UserList{}
+	err := proto.Unmarshal(msg.Buf(), msgProto)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("Banlistmessage info:", msgProto)
+
+}
+func (messageHandler *MessageHandler)handleVoiceTarget(msg *Message) {
+	msgProto := &mumbleproto.VoiceTarget{}
+	err := proto.Unmarshal(msg.Buf(), msgProto)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("Banlistmessage info:", msgProto)
+
+}
+func (messageHandler *MessageHandler)handlePermissionQuery(msg *Message) {
+	msgProto := &mumbleproto.PermissionQuery{}
+	err := proto.Unmarshal(msg.Buf(), msgProto)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("Banlistmessage info:", msgProto)
+
+}
+func (messageHandler *MessageHandler)handleUserStatsMessage (msg *Message){
+	msgProto := &mumbleproto.UserStats{}
+	err := proto.Unmarshal(msg.Buf(), msgProto)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("Banlistmessage info:", msgProto)
+
+}
+func (messageHandler *MessageHandler)handleRequestBlob (msg *Message){
+	msgProto := &mumbleproto.RequestBlob{}
+	err := proto.Unmarshal(msg.Buf(), msgProto)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("Banlistmessage info:", msgProto)
+
+}
+
+//func (messageHandler *MessageHandler)
+
+
