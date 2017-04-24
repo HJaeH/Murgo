@@ -58,8 +58,9 @@ func (channelManager *ChannelManager)startChannelManager() {
 		}
 	}
 }
-func (channelManager *ChannelManager)handleCast( castData interface{}) {
+func (channelManager *ChannelManager)handleCast( castData interface{}, F func(int,int)) {
 	murgoMsg := castData.(*MurgoMessage)
+	F(murgoMsg.)
 
 	switch  murgoMsg.kind {
 	default:

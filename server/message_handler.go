@@ -13,6 +13,7 @@ import (
 
 )
 
+/*
 
 const (
 	//PERMISSIONDENIED_PERMISSION = "Permission"
@@ -25,6 +26,7 @@ const (
 	REJECT_AUTHENTICATORFAIL = "AuthenticatorFail"
 	REJECT_CHANNELNONE = "ChannelNone"
 )
+*/
 
 type MessageHandler struct {
 
@@ -245,8 +247,6 @@ func (messageHandler *MessageHandler) handleUserState(msg *Message) {
 			client:target,
 		}
 	}
-
-
 
 
 	tempUserState := &mumbleproto.UserState{}
