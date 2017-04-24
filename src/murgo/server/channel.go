@@ -1,5 +1,11 @@
 package server
 
+import (
+	"github.com/golang/protobuf/proto"
+	"mumble.info/grumble/pkg/mumbleproto"
+
+)
+
 type Channel struct {
 	Id       int
 	Name     string
@@ -7,82 +13,60 @@ type Channel struct {
 
 	temporary bool
 	clients   map[uint32]*TlsClient
-	parent    *Channel
+	parentId  int
 	children  map[int]*Channel
+	description string
 
+
+	//rootChannel *Channel
 	// Links
-	Links map[int]*Channel
+	//Links map[int]*Channel
 
 }
-
-
-
 
 func NewChannel(id int, name string) (channel *Channel) {
 	channel = new(Channel)
 	channel.Id = id
 	channel.Name = name
 	channel.clients = make(map[uint32]*TlsClient)
-	channel.children = make(map[int]*Channel)
-	channel.Links = make(map[int]*Channel)
-	return
+	channel.parentId = ROOT_CHANNEL
+	return channel
 }
 
-func (channel *Channel) AddChild(child *Channel) {
+
+func (channel *Channel)startChannel(){
+
+}
+
+
+/*func (channel *Channel) AddChild(child *Channel) {
 	child.parent = channel
 	channel.children[child.Id] = child
-}
-
-func (channel *Channel) RemoveChild(child *Channel) {
-	child.parent = nil
-	delete(channel.children, child.Id)
-}
-
-
-// Returns a slice of all channels in this channel's link
-func (channel *Channel) AllLinks() (seen map[int]*Channel) {
-	seen = make(map[int]*Channel)
-	walk := []*Channel{channel}
-	for len(walk) > 0 {
-		current := walk[len(walk)-1]
-		walk = walk[0 : len(walk)-1]
-		for _, linked := range current.Links {
-			if _, alreadySeen := seen[linked.Id]; !alreadySeen {
-				seen[linked.Id] = linked
-				walk = append(walk, linked)
-			}
-		}
-	}
-	return
-}
-
-
-func (channel *Channel) IsTemporary() bool {
-	return channel.temporary
-}
+}*/
 
 func (channel *Channel) IsEmpty() bool {
 	return (len(channel.clients) == 0)
 }
 
+func (channel *Channel) removeClient(client *TlsClient) {
+	delete(channel.clients, client.Session())
+	client.channel = nil
+}
 func (channel *Channel) addClient(client *TlsClient){
 	channel.clients[client.Session()] = client
 	client.channel = channel
 }
 
-
-/*
-
-func (channel *Channel) AddClient(client *server.TlsClient) {
-	channel.clients[client.Session()] = client
-	client.Channel = channel
+func (channel *Channel) ToChannelState() (*mumbleproto.ChannelState) {
+	 channelStateMsg := &mumbleproto.ChannelState{
+		ChannelId: proto.Uint32(uint32(channel.Id)),
+		Parent: proto.Uint32(uint32(channel.parentId)),
+		Name: proto.String(channel.Name),
+		Description: proto.String(channel.description),
+		Temporary: proto.Bool(channel.temporary),
+		Position: proto.Int32(int32(channel.Position)),
+	}
+	return channelStateMsg
 }
 
-func (channel *Channel) RemoveClient(client *Client) {
-	delete(channel.clients, client.Session())
-	client.Channel = nil
-}
-*/
 
-
-//

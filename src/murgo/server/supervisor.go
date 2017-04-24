@@ -36,15 +36,15 @@ func NewSupervisor() (*Supervisor){
 	supervisor.mh = NewMessageHandler(supervisor)
 	supervisor.ts = NewTlsServer(supervisor)
 	supervisor.cm = NewChannelManager(supervisor)
+	supervisor.sm = NewSessionManager(supervisor)
 
 	return supervisor
 }
 
 func (supervisor *Supervisor)StartSupervisor() {
 
-	//go startChannelManager(supervisor) // TODO
-	//go startSessionManager(supervisor) // TODO
-
+	go supervisor.sm.startSessionManager() // TODO
+	go supervisor.cm.startChannelManager() // TODO
 	go supervisor.mh.startMassageHandler() // rumble_server 같은 역할
 	go supervisor.ts.startTlsServer()
 

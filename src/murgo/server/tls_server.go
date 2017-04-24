@@ -33,11 +33,10 @@ func NewTlsServer(supervisor *Supervisor) (*TlsServer) {
 
 }
 
-func (tlsServer *TlsServer) startTlsServer() (err error){
+func (tlsServer *TlsServer) startTlsServer() (err error) {
 	fmt.Println("TlsServer stated")
 	// tls setting
 	cer, err := tls.LoadX509KeyPair("./src/murgo/config/server.crt", "./src/murgo/config/server.key")
-
 	if err != nil {
 		log.Println(err)
 		return
@@ -53,7 +52,7 @@ func (tlsServer *TlsServer) startTlsServer() (err error){
 
 	//accept loop와 cast handling 수행
 	//connChannel := make(chan net.Conn)
-	go func(){
+	go func() {
 		for {
 			conn, err := ln.Accept()
 			if err != nil {
@@ -63,14 +62,8 @@ func (tlsServer *TlsServer) startTlsServer() (err error){
 		}
 	}()
 
-	for {
-		select {
-		case castData := <-tlsServer.Cast:
 
-			tlsServer.handleCast(castData)
-		}
-		//accept owns the flow until new client connected
-	}
+	return err
 }
 
 
@@ -78,7 +71,6 @@ func (tlsServer *TlsServer)handleIncomingClient (conn net.Conn){
 
 	//init tls client
 	tlsClient := NewTlsClient(tlsServer.supervisor, conn)
-
 	if tlsServer.supervisor.tc[tlsClient.session] != nil {
 		// todo
 	}
@@ -96,22 +88,6 @@ func (tlsServer *TlsServer)handleIncomingClient (conn net.Conn){
 	}
 
 	//supervisor에서 클라이언트 고루틴 생성
-	//tlsServer.supervisor.Cast <- tlsClient.session
-	tlsServer.supervisor.startGenServer(tlsClient.recvLoop)
-
-}
-
-
-
-
-func (tlsServer *TlsServer) handleCast(castData interface{}) {
-
-	switch t := castData.(type) {
-	default:
-		fmt.Printf(" : unexpected type %T", t)
-
-	case uint32:
-	//Todo
-	}
+	tlsServer.supervisor.startGenServer(tlsClient.recvLoop) //
 }
 

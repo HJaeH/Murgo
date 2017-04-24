@@ -24,7 +24,14 @@ func NewSessionManager (supervisor *Supervisor)(*SessionManager) {
 	return sessionManager
 }
 
-func (sessionManager *SessionManager)startSessionManager(supervisor *Supervisor) {
+
+const (
+	broadcastMessage uint16 = iota
+
+)
+
+
+func (sessionManager *SessionManager)startSessionManager() {
 	for{
 		select {
 		case castData := <-sessionManager.Cast:
@@ -34,13 +41,27 @@ func (sessionManager *SessionManager)startSessionManager(supervisor *Supervisor)
 	}
 }
 
-func (sessionManager *SessionManager)handleCast (castData interface{}) {
-	//fmt.Println(" casthandler entered")
+func (sessionManager *SessionManager)handleCast(castData interface{}) {
+	murgoMsg := castData.(*MurgoMessage)
 
-	switch t := castData.(type) {
+	switch  murgoMsg.kind {
 	default:
-		fmt.Printf("unexpected type %T", t)
-	case *Message:
-	//todo
+		fmt.Printf("unexpected type sm")
+	case broadcastMessage:
+		sessionManager.broadcastMessage(murgoMsg.msg)
 	}
 }
+
+func (sessionManager *SessionManager) broadcastMessage(msg interface{}){
+	for _, eachClient := range sessionManager.clientList {
+		/*if client.state < StateClientAuthenticated {
+			continue
+		}*/
+		eachClient.sendMessage(msg)
+	}
+}
+
+/*
+func elapsed(prev time.Time, now time.Time)(time.Time){
+	return now - prev
+}*/
