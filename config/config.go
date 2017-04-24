@@ -7,7 +7,6 @@ package config
 
 
 const (
-	//HOST = "localhost"
 	DEFAULT_PORT = ":"+"8080"
 	CONN_TYPE = "tcp"
 )
