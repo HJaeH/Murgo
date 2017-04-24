@@ -9,7 +9,7 @@ type Message struct {
 
 type MurgoMessage struct {
 	kind uint16
-	channelID int
+	channelId int
 	client *TlsClient
 	channel *Channel
 	msg interface{}

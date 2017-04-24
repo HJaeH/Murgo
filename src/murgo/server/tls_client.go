@@ -12,8 +12,6 @@ import (
 	"mumble.info/grumble/pkg/mumbleproto"
 	"bufio"
 	"murgo/config"
-	"mumble.info/grumble/pkg/acl"
-	"fmt"
 )
 
 
@@ -22,24 +20,28 @@ type TlsClient struct {
 
 	// 유저가 접속중인 channel
 	channel *Channel
-	channelID uint32
-
-
 	conn net.Conn
 	session uint32
 
-	username string
+	userName string
+	userId int
 	server *TlsServer
 	reader  *bufio.Reader
 
 	tcpaddr *net.TCPAddr
 	certHash string
 
-
+	bandWidth *BandWidth
 	//user's setting
 	selfDeaf bool
 	selfMute bool
-
+	mute bool
+	deaf bool
+	tcpPingAvg float32
+	tcpPingVar float32
+	tcpPackets uint32
+	opus         bool
+	suppress bool
 
 	//client auth infomations
 	codecs []int32
@@ -48,8 +50,13 @@ type TlsClient struct {
 	//crypt state
 	cryptState *config.CryptState
 
+	//client connection state
+	state int
+
 	//for test
 	testCounter int
+
+
 }
 
 // write 작업과 read 작업 구분 필요
@@ -65,7 +72,7 @@ func NewTlsClient(supervisor *Supervisor, conn net.Conn) (*TlsClient){
 	tlsClient.supervisor = supervisor
 	tlsClient.server = supervisor.ts
 
-	//
+	tlsClient.bandWidth = NewBandWidth()
 	tlsClient.conn = conn
 	tlsClient.session = tlsClient.server.sessionPool.Get()
 	tlsClient.reader = bufio.NewReader(tlsClient.conn)
@@ -73,7 +80,7 @@ func NewTlsClient(supervisor *Supervisor, conn net.Conn) (*TlsClient){
 	tlsClient.testCounter = 0
 
 	// 기본으로 루트채널에 할당
-	tlsClient.channel = supervisor.cm.RootChannel()
+	tlsClient.channel = nil
 	return tlsClient
 }
 
@@ -95,32 +102,8 @@ func (tlsClient *TlsClient) recvLoop(){
 	}
 }
 
-const (
-	message uint16 = iota
-
-)
-
-func (tlsClient *TlsClient)handleCast( castData interface{}) {
-	murgoMsg := castData.(*MurgoMessage)
-
-	switch murgoMsg.kind {
-	default:
-		fmt.Printf("unexpected type")
-	case message:
-		tlsClient.sendMessage(murgoMsg.msg)
-	//todo
-	}
-
-
-
-}
-
-
-
-
 
 ///// internal functions
-
 //send msg to client
 func (tlsClient *TlsClient) sendMessage(msg interface{}) error {
 
@@ -194,19 +177,12 @@ func (tlsClient *TlsClient) readProtoMessage() (msg *Message, err error) {
 	}
 	tlsClient.testCounter++
 
-	msg = &Message{}
-	/*{
+	msg = &Message{
 		buf:    buf,
 		kind:   kind,
 		client: tlsClient,
 		testCounter: tlsClient.testCounter,
-	}*/
-	msg.SetBuf(buf)
-	msg.SetClient(tlsClient)
-	msg.SetKind(kind)
-	msg.SetTestCounter(tlsClient.testCounter)
-
-
+	}
 	return msg, err
 }
 
@@ -214,65 +190,22 @@ func (tlsClient *TlsClient) readProtoMessage() (msg *Message, err error) {
 func (tlsClient *TlsClient) Disconnect() {
 
 }
+func (tlsClient *TlsClient) ToUserState()(*mumbleproto.UserState) {
+	userStateMsg := &mumbleproto.UserState{
+		Session: proto.Uint32(tlsClient.Session()),
+		Name: proto.String(tlsClient.userName),
+		UserId: proto.Uint32(uint32(tlsClient.userId)),
+		ChannelId:proto.Uint32(uint32(tlsClient.channel.Id)),
+		Mute:proto.Bool(tlsClient.mute),
+		Deaf:proto.Bool(tlsClient.deaf),
+		Suppress:proto.Bool(tlsClient.suppress),
+		SelfDeaf:proto.Bool(tlsClient.selfDeaf),
+		SelfMute: proto.Bool(tlsClient.selfMute),
+	}
+	return userStateMsg
+}
+
 
 func (tlsClient *TlsClient) Session()(uint32) {
 	return tlsClient.session
-}
-
-
-
-// Send permission denied by who, what, where
-func (tlsClient *TlsClient)sendPermissionDenied(who *TlsClient, where *Channel, what acl.Permission) {
-	pd := &mumbleproto.PermissionDenied{
-		Permission: proto.Uint32(uint32(what)),
-		ChannelId:  proto.Uint32(uint32(where.Id)),
-		Session:    proto.Uint32(who.Session()),
-		Type:       mumbleproto.PermissionDenied_Permission.Enum(),
-	}
-	err := tlsClient.sendMessage(pd)
-	if err != nil {
-		//tlsClient.Panicf("%v", err.Error())
-		return
-	}
-}
-
-func (tlsClient *TlsClient) enterChannel(channel *Channel){
-	tlsClient.channel = channel
-}
-//
-//func (client *TlsClient) sendChannelList() {
-//	client.sendChannelTree(client.server.RootChannel())
-//}
-
-func (client *TlsClient) sendChannelTree(channel *Channel) {
-	chanstate := &mumbleproto.ChannelState{
-		ChannelId: proto.Uint32(uint32(channel.Id)),
-		Name:      proto.String(channel.Name),
-	}
-	if channel.parent != nil {
-		chanstate.Parent = proto.Uint32(uint32(channel.parent.Id))
-	}
-
-
-
-	if channel.IsTemporary() {
-		chanstate.Temporary = proto.Bool(true)
-	}
-
-	chanstate.Position = proto.Int32(int32(channel.Position))
-
-	links := []uint32{}
-	for cid, _ := range channel.Links {
-		links = append(links, uint32(cid))
-	}
-	chanstate.Links = links
-
-	err := client.sendMessage(chanstate)
-	if err != nil {
-		//client.Panicf("%v", err)
-	}
-
-	for _, subchannel := range channel.children {
-		client.sendChannelTree(subchannel)
-	}
 }
