@@ -29,12 +29,12 @@ func NewMessageHandler(supervisor *Supervisor) (*MessageHandler) {
 func (messageHandler *MessageHandler) startMassageHandler() {
 	// TODO : panic 발생시 모든 모듈의 이 시점으로 리턴할 것
 	// TODO : 일단 에러 발생 시점 파악을 위해 주석처리 이후에 슈퍼바이저에서 코드 통합 강구
-	defer func(){
+	/*defer func(){
 		if err:= recover(); err!= nil{
 			fmt.Println("Message Handler recovered")
 			messageHandler.startMassageHandler()
 		}
-	}()
+	}()*/
 
 	fmt.Println("Message Handler stared")
 	for {
@@ -47,7 +47,6 @@ func (messageHandler *MessageHandler) startMassageHandler() {
 }
 
 func (messageHandler *MessageHandler) handleCast(castData interface{}) {
-	fmt.Println("message recved")
 	switch t := castData.(type) {
 	default:
 		fmt.Printf("unexpected type %T", t)

@@ -99,7 +99,7 @@ func (sessionManaser *SessionManager)handleIncomingClient(conn *net.Conn){
 
 	//init tls client
 	session := sessionManaser.sessionPool.Get()
-	client := NewTlsClient(conn, session)
+	client := NewTlsClient(conn, session, sessionManaser.supervisor)
 
 	sessionManaser.clientList[session] = client
 	// send version information

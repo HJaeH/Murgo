@@ -61,13 +61,13 @@ type TlsClient struct {
 
 
 // called at session manager
-func NewTlsClient(conn *net.Conn, session uint32) (*TlsClient){
+func NewTlsClient(conn *net.Conn, session uint32, supervisor *Supervisor) (*TlsClient){
 
 	//create new object
 	tlsClient := new(TlsClient)
 	tlsClient.cryptState = new(config.CryptState)
 
-
+	tlsClient.supervisor = supervisor
 	tlsClient.bandWidth = NewBandWidth()
 	tlsClient.conn = conn
 	tlsClient.session = session
@@ -93,8 +93,9 @@ func (tlsClient *TlsClient) recvLoop(){
 				return
 			}
 		}
-		fmt.Println(msg)
+
 		tlsClient.supervisor.mh.Cast <- msg
+		fmt.Println(msg)
 
 	}
 }
