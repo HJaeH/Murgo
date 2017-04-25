@@ -48,10 +48,9 @@ func (tlsServer *TlsServer) startTlsServer() (err error) {
 		log.Println(err)
 		return
 	}
-	//defer ln.Close()
+	defer ln.Close()
 
 	//accept loop와 cast handling 수행
-	//connChannel := make(chan net.Conn)
 	go func() {
 		for {
 			conn, err := ln.Accept()
@@ -87,7 +86,9 @@ func (tlsServer *TlsServer)handleIncomingClient (conn net.Conn){
 		fmt.Println("Error sending message to client")
 	}
 
-	//supervisor에서 클라이언트 고루틴 생성
-	tlsServer.supervisor.startGenServer(tlsClient.recvLoop) //
+	//create client message receive loop as gen server
+	// TODO : the start time need to be pushed back - after duplicate check
+	// TODO : but the work is conducted in authenticate which is running in message accepting loop
+	tlsServer.supervisor.startGenServer(tlsClient.recvLoop)
 }
 

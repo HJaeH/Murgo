@@ -1,3 +1,9 @@
+// @author 허재화 <jhwaheo@smilegate.com>
+// @version 1.0
+// murgo channel manager
+
+
+
 package server
 
 import (
@@ -26,23 +32,28 @@ const ROOT_CHANNEL = 0
 
 func NewChannelManager(supervisor *Supervisor)(*ChannelManager){
 
+
+	//assign heap
 	channelManager := new(ChannelManager)
 	channelManager.channelList = make(map [int]*Channel)
 	channelManager.Cast = make(chan interface{})
 	channelManager.Call = make(chan interface{})
 
-
+	// set uservisor
 	channelManager.supervisor = supervisor
+
+	// set root channel as default channel for all user
 	rootChannel := NewChannel(ROOT_CHANNEL, "RootChannel")
 	channelManager.rootChannel = rootChannel
 	channelManager.channelList[ROOT_CHANNEL] = rootChannel
-	// 다음채널은 1부터 시작
+
+	//Add one for each channel ID
 	channelManager.nextChannelID = ROOT_CHANNEL + 1
 
 	return channelManager
 }
 
-const ( // enum 이나 name space
+const ( // TODO : keep other module from accessing those, enum or name space,,,,
 	addChannel uint16 = iota
 	broadCastChannel
 	sendChannelList
@@ -58,13 +69,16 @@ func (channelManager *ChannelManager)startChannelManager() {
 		}
 	}
 }
+
+
+// TODO : cast data could be a function .
 func (channelManager *ChannelManager)handleCast( castData interface{}/*, F func(int,int)*/) {
 	murgoMsg := castData.(*MurgoMessage)
 	//F(murgoMsg.)
 
 	switch  murgoMsg.kind {
 	default:
-		fmt.Printf("unexpected type cm ")
+		fmt.Printf("unexpected type ")
 	case addChannel:
 		channelManager.addChannel(murgoMsg.ChannelName, murgoMsg.client)
 	case userEnterChannel:
@@ -88,6 +102,7 @@ func (channelManager *ChannelManager) addChannel(channelName string, client *Tls
 	}
 	channel := NewChannel(channelManager.nextChannelID, channelName)
 	channelManager.channelList[channel.Id] = channel
+	// TODO : Add two data to channel structure
 	//channel.Position = *(int32(channelStateMsg.Position))
 	//channel.temporary = *channelStateMsg.Temporary
 
@@ -126,7 +141,7 @@ func (channelManager *ChannelManager) broadCastChannel(channelId int, msg interf
 	if err != nil {
 		fmt.Println(err)
 	}
-	for _, client := range channel.clients { //다른 루틴 데이터 접근 read 작업
+	for _, client := range channel.clients {
 		client.sendMessage(msg)
 	}
 }
@@ -136,7 +151,7 @@ func (channelManager *ChannelManager) broadCastChannelWithoutMe(channelId int, m
 	if err != nil {
 		fmt.Println(err)
 	}
-	for _, eachClient := range channel.clients { //다른 루틴 데이터 접근 read 작업
+	for _, eachClient := range channel.clients {
 		if reflect.DeepEqual(client, eachClient) {
 			continue
 		}
