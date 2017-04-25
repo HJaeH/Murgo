@@ -34,7 +34,7 @@ func NewTlsServer(supervisor *Supervisor) (*TlsServer) {
 }
 
 func (tlsServer *TlsServer) startTlsServer() (err error) {
-	fmt.Println("TlsServer stated")
+	fmt.Println("TlsServer stared")
 	// tls setting
 	cer, err := tls.LoadX509KeyPair("./src/murgo/config/server.crt", "./src/murgo/config/server.key")
 	if err != nil {
@@ -56,6 +56,7 @@ func (tlsServer *TlsServer) startTlsServer() (err error) {
 			conn, err := ln.Accept()
 			if err != nil {
 				fmt.Println(" Accepting a conneciton failed handling a client")
+				//continue
 			}
 			tlsServer.handleIncomingClient(conn)
 		}
