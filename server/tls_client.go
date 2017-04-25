@@ -12,6 +12,7 @@ import (
 	"mumble.info/grumble/pkg/mumbleproto"
 	"bufio"
 	"murgo/config"
+	"fmt"
 )
 
 
@@ -20,12 +21,11 @@ type TlsClient struct {
 
 	// 유저가 접속중인 channel
 	channel *Channel
-	conn net.Conn
+	conn *net.Conn
 	session uint32
 
 	userName string
 	userId int
-	server *TlsServer
 	reader  *bufio.Reader
 
 	tcpaddr *net.TCPAddr
@@ -59,23 +59,19 @@ type TlsClient struct {
 
 }
 
-// write 작업과 read 작업 구분 필요
 
-
-func NewTlsClient(supervisor *Supervisor, conn net.Conn) (*TlsClient){
+// called at session manager
+func NewTlsClient(conn *net.Conn, session uint32) (*TlsClient){
 
 	//create new object
 	tlsClient := new(TlsClient)
 	tlsClient.cryptState = new(config.CryptState)
 
-	//set servers
-	tlsClient.supervisor = supervisor
-	tlsClient.server = supervisor.ts
 
 	tlsClient.bandWidth = NewBandWidth()
 	tlsClient.conn = conn
-	tlsClient.session = tlsClient.server.sessionPool.Get()
-	tlsClient.reader = bufio.NewReader(tlsClient.conn)
+	tlsClient.session = session
+	tlsClient.reader = bufio.NewReader(*tlsClient.conn)
 
 	tlsClient.testCounter = 0
 
@@ -97,6 +93,7 @@ func (tlsClient *TlsClient) recvLoop(){
 				return
 			}
 		}
+		fmt.Println(msg)
 		tlsClient.supervisor.mh.Cast <- msg
 
 	}
@@ -142,7 +139,7 @@ func (tlsClient *TlsClient) sendMessage(msg interface{}) error {
 		return err
 	}
 
-	_, err = tlsClient.conn.Write(buf.Bytes())
+	_, err = (*tlsClient.conn).Write(buf.Bytes())
 	if err != nil {
 		return err
 	}
@@ -191,6 +188,7 @@ func (tlsClient *TlsClient) Disconnect() {
 
 }
 func (tlsClient *TlsClient) ToUserState()(*mumbleproto.UserState) {
+
 	userStateMsg := &mumbleproto.UserState{
 		Session: proto.Uint32(tlsClient.Session()),
 		Name: proto.String(tlsClient.userName),

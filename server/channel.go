@@ -6,6 +6,8 @@ import (
 
 )
 
+
+//todo : Each Channel should be a module not just a data structure
 type Channel struct {
 	Id       int
 	Name     string
@@ -21,8 +23,9 @@ type Channel struct {
 	//rootChannel *Channel
 	// Links
 	//Links map[int]*Channel
-
 }
+
+
 
 func NewChannel(id int, name string) (channel *Channel) {
 	channel = new(Channel)
@@ -31,12 +34,15 @@ func NewChannel(id int, name string) (channel *Channel) {
 	channel.clients = make(map[uint32]*TlsClient)
 	channel.parentId = ROOT_CHANNEL
 	return channel
+
+
+
 }
+
 
 //Todo : is Channel resoures thread safe?
 // TODO : if not it need to be run as genserver
 func (channel *Channel)startChannel(){
-
 }
 
 func (channel *Channel) IsEmpty() bool {

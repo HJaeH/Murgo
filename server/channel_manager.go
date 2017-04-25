@@ -18,7 +18,6 @@ import (
 type ChannelManager struct {
 	supervisor *Supervisor
 
-
 	channelList map[int]*Channel
 	nextChannelID int
 
@@ -26,6 +25,7 @@ type ChannelManager struct {
 	Call chan interface{}
 
 	rootChannel *Channel
+
 }
 
 const ROOT_CHANNEL = 0
@@ -42,6 +42,7 @@ func NewChannelManager(supervisor *Supervisor)(*ChannelManager){
 	// set uservisor
 	channelManager.supervisor = supervisor
 
+
 	// set root channel as default channel for all user
 	rootChannel := NewChannel(ROOT_CHANNEL, "RootChannel")
 	channelManager.rootChannel = rootChannel
@@ -49,6 +50,7 @@ func NewChannelManager(supervisor *Supervisor)(*ChannelManager){
 
 	//Add one for each channel ID
 	channelManager.nextChannelID = ROOT_CHANNEL + 1
+
 
 	return channelManager
 }
@@ -62,6 +64,17 @@ const ( // TODO : keep other module from accessing those, enum or name space,,,,
 
 // channel receiving loop
 func (channelManager *ChannelManager)startChannelManager() {
+
+	// TODO : panic 발생시 모든 모듈의 이 시점으로 리턴할 것
+	// TODO : 일단 에러 발생 시점 파악을 위해 주석처리 이후에 슈퍼바이저에서 코드 통합 강구
+	/*defer func(){
+		if err:= recover(); err!= nil{
+			fmt.Println("Channel manager recovered")
+			channelManager.startChannelManager()
+		}
+	}()
+	*/
+
 	for{
 		select {
 		case castData := <-channelManager.Cast:
@@ -72,9 +85,8 @@ func (channelManager *ChannelManager)startChannelManager() {
 
 
 // TODO : cast data could be a function .
-func (channelManager *ChannelManager)handleCast( castData interface{}/*, F func(int,int)*/) {
+func (channelManager *ChannelManager)handleCast( castData interface{}) {
 	murgoMsg := castData.(*MurgoMessage)
-	//F(murgoMsg.)
 
 	switch  murgoMsg.kind {
 	default:
@@ -100,6 +112,7 @@ func (channelManager *ChannelManager) addChannel(channelName string, client *Tls
 			return
 		}
 	}
+
 	channel := NewChannel(channelManager.nextChannelID, channelName)
 	channelManager.channelList[channel.Id] = channel
 	// TODO : Add two data to channel structure
@@ -115,10 +128,11 @@ func (channelManager *ChannelManager) addChannel(channelName string, client *Tls
 		msg:channelStateMsg,
 	}
 
-
+	// let all clients know the created channel
 	channelManager.sendChannelList(client)
+
 	channelManager.broadCastChannel(channel.Id, channelStateMsg)
-	channelManager.userEnterChannel(channel.Id, client)
+	//channelManager.userEnterChannel(channel.Id, client)
 
 	return
 }
