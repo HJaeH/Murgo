@@ -192,8 +192,6 @@ func (channelManager *ChannelManager) userEnterChannel(channelId int, client *Tl
 		}
 	}
 
-
-
 	client.channel = newChannel
 	newChannel.addClient(client)
 	userState := client.ToUserState()
@@ -210,23 +208,23 @@ func (channelManager *ChannelManager) userEnterChannel(channelId int, client *Tl
 		//새 채널입장을 채널 유저들에게 알림
 		channelManager.broadCastChannelWithoutMe(newChannel.Id, userState, client)
 		//채널에 있는 유저들을 입장하는 유저에게 알림
-		//newChannel.sendUserListInChannel(client)
-		for _, users := range newChannel.clients {
+		newChannel.sendUserListInChannel(client)
+	/*	for _, users := range newChannel.clients {
 			client.sendMessage(users.ToUserState())
 
-		}
+		}*/
 	} else {
 		client.sendMessage(userState)
 	}
 
 	//for test
-	/*for _, eachChannel := range channelManager.channelList{
+	for _, eachChannel := range channelManager.channelList{
 		fmt.Print(eachChannel.Name, ": ")
 		for _, eachUser := range eachChannel.clients {
 			fmt.Print(eachUser.userName, ", ")
 		}
 		fmt.Println()
-	}*/
+	}
 }
 
 func (channelManager *ChannelManager) removeChannel(channel *Channel) {
