@@ -114,6 +114,7 @@ func (channelManager *ChannelManager) addChannel(channelName string, client *Tls
 	}
 
 	channel := NewChannel(channelManager.nextChannelID, channelName)
+	channelManager.nextChannelID++
 	channelManager.channelList[channel.Id] = channel
 	// TODO : Add two data to channel structure
 	//channel.Position = *(int32(channelStateMsg.Position))
@@ -123,16 +124,13 @@ func (channelManager *ChannelManager) addChannel(channelName string, client *Tls
 
 
 	channelStateMsg := channel.ToChannelState()
+	//let all session know the created channel
 	channelManager.supervisor.sm.Cast <- &MurgoMessage{
 		kind:broadcastMessage,
 		msg:channelStateMsg,
 	}
-
-	// let all clients know the created channel
-	channelManager.sendChannelList(client)
-
-	channelManager.broadCastChannel(channel.Id, channelStateMsg)
-	//channelManager.userEnterChannel(channel.Id, client)
+	//channelManager.broadCastChannel(channel.Id, channelstateMsg)
+	channelManager.userEnterChannel(channel.Id, client)
 
 	return
 }
@@ -192,14 +190,16 @@ func (channelManager *ChannelManager) sendChannelList(client *TlsClient) {
 
 func (channelManager *ChannelManager) userEnterChannel(channelId int, client *TlsClient){
 
-	newChannel, err := channelManager.supervisor.cm.channel(channelId) //todo
+	newChannel, err := channelManager.channel(channelId)
 	if err != nil {
 		panic("Channel Id doesn't exist")
 	}
 	oldChannel := client.channel
+	fmt.Println("newchan:", newChannel.Name)
 	if oldChannel == newChannel {
 		return
 	}
+
 	if oldChannel != nil {
 		oldChannel.removeClient(client)
 		if oldChannel.IsEmpty() {
@@ -207,7 +207,10 @@ func (channelManager *ChannelManager) userEnterChannel(channelId int, client *Tl
 
 		}
 	}
+
 	newChannel.addClient(client)
+	client.channel = newChannel
+
 
 	userState := client.ToUserState()
 	if oldChannel != nil && oldChannel.Id != ROOT_CHANNEL {
@@ -220,7 +223,7 @@ func (channelManager *ChannelManager) userEnterChannel(channelId int, client *Tl
 
 	if newChannel.Id != ROOT_CHANNEL {
 		//새 채널입장을 알림
-		channelManager.broadCastChannelWithoutMe(newChannel.Id, userState, client)
+		channelManager.broadCastChannel(newChannel.Id, userState)
 	}
 
 }
@@ -250,9 +253,12 @@ func (channelManager *ChannelManager) removeChannel(channel *Channel) {
 	}
 
 	// Remove the channel itself
-	parent := channelManager.channelList[channel.parentId]
+	rootChannel, err := channelManager.channel(ROOT_CHANNEL)
+	if err != nil {
+		panic("Root doesn't exist")
+	}
 	delete(channelManager.channelList, channel.Id)
-	delete(parent.children, channel.Id)
+	delete(rootChannel.children, channel.Id)
 
 
 	channelRemoveMsg := &mumbleproto.ChannelRemove{
@@ -261,5 +267,11 @@ func (channelManager *ChannelManager) removeChannel(channel *Channel) {
 	channelManager.supervisor.sm.Cast <- &MurgoMessage{
 		kind:broadcastMessage,
 		msg:channelRemoveMsg,
+	}
+}
+
+func (channelManager *ChannelManager) printChannels()  {
+	for _, channel := range channelManager.channelList {
+		fmt.Print(channel , ":: ")
 	}
 }

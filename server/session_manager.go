@@ -121,7 +121,6 @@ func (sessionManaser *SessionManager)handleIncomingClient(conn *net.Conn){
 
 
 func (sessionManager *SessionManager) broadcastMessage(msg interface{}){
-	fmt.Println("broad cast")
 	for _, eachClient := range sessionManager.clientList {
 		/*if client.state < StateClientAuthenticated {
 			continue

@@ -12,7 +12,6 @@ import (
 	"mumble.info/grumble/pkg/mumbleproto"
 	"bufio"
 	"murgo/config"
-	"fmt"
 )
 
 
@@ -95,7 +94,6 @@ func (tlsClient *TlsClient) recvLoop(){
 		}
 
 		tlsClient.supervisor.mh.Cast <- msg
-		fmt.Println(msg)
 
 	}
 }

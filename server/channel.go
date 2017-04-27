@@ -33,15 +33,12 @@ func NewChannel(id int, name string) (channel *Channel) {
 	channel.Name = name
 	channel.clients = make(map[uint32]*TlsClient)
 	channel.parentId = ROOT_CHANNEL
+	channel.Position = 0
+	channel.temporary = true
 	return channel
-
-
-
 }
 
-
-//Todo : is Channel resoures thread safe?
-// TODO : if not it need to be run as genserver
+// TODO : need to be run as genserver
 func (channel *Channel)startChannel(){
 }
 
@@ -55,7 +52,6 @@ func (channel *Channel) removeClient(client *TlsClient) {
 }
 func (channel *Channel) addClient(client *TlsClient){
 	channel.clients[client.Session()] = client
-	client.channel = channel
 }
 
 func (channel *Channel) ToChannelState() (*mumbleproto.ChannelState) {

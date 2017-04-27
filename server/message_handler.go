@@ -176,7 +176,7 @@ func (messageHandler *MessageHandler) handlePing(msg *Message) {
 		return
 	}
 
-	fmt.Println("ping info:", ping, "msg id : ", msg.testCounter)
+	//fmt.Println("ping info:", ping, "msg id : ", msg.testCounter)
 	client := msg.Client()
 	client.sendMessage(&mumbleproto.Ping{
 		Timestamp: ping.Timestamp,
@@ -196,8 +196,8 @@ func (messageHandler *MessageHandler) handleUserState(msg *Message) {
 		//
 		return
 	}
+
 	fmt.Println("userstate info:", userstate, "msg id :", msg.testCounter, "from:", msg.client.userName)
-	fmt.Println(" ------ ", msg.client.ToUserState())
 
 	clients := messageHandler.supervisor.tc
 	channelManager := messageHandler.supervisor.cm
@@ -225,6 +225,7 @@ func (messageHandler *MessageHandler) handleUserState(msg *Message) {
 
 	//Channel ID 필드 값이 있는 경우
 	if userstate.ChannelId != nil {
+
 		channelManager.Cast <- &MurgoMessage{
 			kind:userEnterChannel,
 			channelId:int(*userstate.ChannelId),
@@ -281,6 +282,7 @@ func (messageHandler *MessageHandler) handleChannelStateMessage(msg *Message) {
 			ChannelName:*channelStateMsg.Name,
 			client:msg.client,
 		}
+		messageHandler.supervisor.cm.printChannels()
 	}
 }
 func (messageHandler *MessageHandler)handleUserStatsMessage(msg *Message) {
@@ -291,7 +293,7 @@ func (messageHandler *MessageHandler)handleUserStatsMessage(msg *Message) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("userstats info:", userStats, "from:", msg.client.userName)
+	//fmt.Println("userstats info:", userStats, "from:", msg.client.userName)
 	newUserStatsMsg := &mumbleproto.UserStats{
 		TcpPingAvg: proto.Float32(client.tcpPingAvg),
 		TcpPingVar: proto.Float32(client.tcpPingVar),
