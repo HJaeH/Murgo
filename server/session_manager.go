@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"net"
 
-	"mumble.info/grumble/pkg/mumbleproto"
 	"murgo/config"
+	"murgo/pkg/mumbleproto"
+	"murgo/pkg/sessionpool"
 
 	"github.com/golang/protobuf/proto"
-	"mumble.info/grumble/pkg/sessionpool"
 )
 
 type SessionManager struct {
@@ -50,13 +50,12 @@ func (sessionManager *SessionManager)startSessionManager() {
 
 	// TODO : panic 발생시 모든 모듈의 이 시점으로 리턴할 것
 	// TODO : 일단 에러 발생 시점 파악을 위해 주석처리 이후에 슈퍼바이저에서 코드 통합 강구
-	/*defer func(){
+	defer func(){
 		if err:= recover(); err!= nil{
 			fmt.Println("Session manager recovered")
 			sessionManager.startSessionManager()
 		}
 	}()
-*/
 
 	for{
 		select {
@@ -121,7 +120,6 @@ func (sessionManaser *SessionManager)handleIncomingClient(conn *net.Conn){
 
 
 func (sessionManager *SessionManager) broadcastMessage(msg interface{}){
-	fmt.Println("broad cast")
 	for _, eachClient := range sessionManager.clientList {
 		/*if client.state < StateClientAuthenticated {
 			continue

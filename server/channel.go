@@ -1,9 +1,11 @@
 package server
 
 import (
-	"github.com/golang/protobuf/proto"
-	"mumble.info/grumble/pkg/mumbleproto"
+	"fmt"
 
+	"murgo/pkg/mumbleproto"
+
+	"github.com/golang/protobuf/proto"
 )
 
 
@@ -19,7 +21,7 @@ type Channel struct {
 	children  map[int]*Channel
 	description string
 
-	// TODO : to be figured out its role
+	// TODO : not used yet
 	//rootChannel *Channel
 	// Links
 	//Links map[int]*Channel
@@ -33,15 +35,12 @@ func NewChannel(id int, name string) (channel *Channel) {
 	channel.Name = name
 	channel.clients = make(map[uint32]*TlsClient)
 	channel.parentId = ROOT_CHANNEL
+	channel.Position = 0
+	channel.temporary = true
 	return channel
-
-
-
 }
 
-
-//Todo : is Channel resoures thread safe?
-// TODO : if not it need to be run as genserver
+// TODO : need to be run as genserver
 func (channel *Channel)startChannel(){
 }
 
@@ -55,7 +54,6 @@ func (channel *Channel) removeClient(client *TlsClient) {
 }
 func (channel *Channel) addClient(client *TlsClient){
 	channel.clients[client.Session()] = client
-	client.channel = channel
 }
 
 func (channel *Channel) ToChannelState() (*mumbleproto.ChannelState) {
@@ -71,3 +69,17 @@ func (channel *Channel) ToChannelState() (*mumbleproto.ChannelState) {
 }
 
 
+func (channel *Channel) sendUserListInChannel(client *TlsClient) {
+	fmt.Println(channel.Name)
+	for _, eachUser := range channel.clients {
+		fmt.Print(eachUser.userName)
+		/*if reflect.DeepEqual(eachUser, client) {
+			continue
+		}*/
+		fmt.Println("client list: ", client.userName)
+		err := client.sendMessage(eachUser.ToUserState())
+		if err != nil {
+			panic(" Error sending channel User list")
+		}
+	}
+}

@@ -1,3 +1,6 @@
+// @author 허재화 <jhwaheo@smilegate.com>
+// @version 1.0
+// murgo tls client module
 
 package server
 
@@ -6,13 +9,14 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"github.com/golang/protobuf/proto"
 	"net"
 	"io"
-	"mumble.info/grumble/pkg/mumbleproto"
 	"bufio"
+
 	"murgo/config"
-	"fmt"
+	"murgo/pkg/mumbleproto"
+
+	"github.com/golang/protobuf/proto"
 )
 
 
@@ -95,7 +99,6 @@ func (tlsClient *TlsClient) recvLoop(){
 		}
 
 		tlsClient.supervisor.mh.Cast <- msg
-		fmt.Println(msg)
 
 	}
 }
@@ -191,7 +194,7 @@ func (tlsClient *TlsClient) Disconnect() {
 func (tlsClient *TlsClient) ToUserState()(*mumbleproto.UserState) {
 
 	userStateMsg := &mumbleproto.UserState{
-		Session: proto.Uint32(tlsClient.Session()),
+		Session: proto.Uint32(tlsClient.session),
 		Name: proto.String(tlsClient.userName),
 		UserId: proto.Uint32(uint32(tlsClient.userId)),
 		ChannelId:proto.Uint32(uint32(tlsClient.channel.Id)),

@@ -1,3 +1,6 @@
+// @author 허재화 <jhwaheo@smilegate.com>
+// @version 1.0
+// server tls accept server
 
 package server
 
@@ -5,10 +8,9 @@ package server
 import (
 	"fmt"
 	"crypto/tls"
-	"log"
 
 	"murgo/config"
-	"mumble.info/grumble/pkg/sessionpool"
+	"murgo/pkg/sessionpool"
 )
 
 type TlsServer struct {
@@ -33,7 +35,7 @@ func (tlsServer *TlsServer) startTlsServer() {
 	// tls setting
 	cer, err := tls.LoadX509KeyPair("./src/murgo/config/server.crt", "./src/murgo/config/server.key")
 	if err != nil {
-		log.Println(err)
+		fmt.Println(err)
 		return
 	}
 	//server start to listen on tls
@@ -42,7 +44,7 @@ func (tlsServer *TlsServer) startTlsServer() {
 	defer ln.Close()
 	if err != nil {
 
-		log.Println(err)
+		fmt.Println(err)
 		return
 	}
 
