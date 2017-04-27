@@ -1,5 +1,7 @@
 package server
 
+import "net"
+
 type Message struct {
 	buf    []byte
 	kind   uint16
@@ -14,6 +16,8 @@ type MurgoMessage struct {
 	channel *Channel
 	msg interface{}
 	ChannelName string
+	conn *net.Conn
+
 }
 
 

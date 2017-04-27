@@ -42,22 +42,15 @@ func NewSupervisor() (*Supervisor){
 }
 
 func (supervisor *Supervisor)StartSupervisor() {
+	supervisor.startGenServer(supervisor.sm.startSessionManager)
+	supervisor.startGenServer(supervisor.cm.startChannelManager)
+	supervisor.startGenServer(supervisor.mh.startMassageHandler)
+	supervisor.startGenServer(supervisor.ts.startTlsServer)
 
-	go supervisor.sm.startSessionManager() // TODO
-	go supervisor.cm.startChannelManager() // TODO
-	go supervisor.mh.startMassageHandler() // rumble_server 같은 역할
-	go supervisor.ts.startTlsServer()
+	// by making gen server function supervisor doesn't need to be keep running
+	//select {}
 
-	for{
-		select {
-		//supervisor cast channel로 session값이 오면 newclient
-		case castData := <-supervisor.Cast:
-			supervisor.handleCast(castData)
-		default:
-		}
-	}
 }
-
 
 
 func (supervisor *Supervisor) handleCast (castData interface{}) {
@@ -65,11 +58,7 @@ func (supervisor *Supervisor) handleCast (castData interface{}) {
 	switch t := castData.(type) {
 	default:
 		fmt.Printf(" : unexpected type %T", t)
-	/*case uint32:
-		session := castData.(uint32)
-		go supervisor.tc[session].startTlsClient()*/
 	}
-
 }
 
 
@@ -79,7 +68,7 @@ func (supervisor *Supervisor)startGenServer(genServer func()) {
 
 	defer func(){
 		if err:= recover(); err!= nil{
-			fmt.Println("Fail to recover client")
+			fmt.Println("recoverd")
 		}
 	}()
 	go genServer()
