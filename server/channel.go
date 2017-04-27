@@ -5,6 +5,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 
+	"reflect"
 )
 
 
@@ -20,7 +21,7 @@ type Channel struct {
 	children  map[int]*Channel
 	description string
 
-	// TODO : to be figured out its role
+	// TODO : not used yet
 	//rootChannel *Channel
 	// Links
 	//Links map[int]*Channel
@@ -68,3 +69,14 @@ func (channel *Channel) ToChannelState() (*mumbleproto.ChannelState) {
 }
 
 
+func (channel *Channel) sendUserListInChannel(client *TlsClient) {
+	for _, eachUser := range channel.clients {
+		if reflect.DeepEqual(eachUser, client) {
+			continue
+		}
+		err := client.sendMessage(eachUser.ToUserState())
+		if err != nil {
+			panic(" Error sending channel User list")
+		}
+	}
+}

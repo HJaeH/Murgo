@@ -1,6 +1,8 @@
 package server
 
-import "net"
+import (
+	"net"
+)
 
 type Message struct {
 	buf    []byte
@@ -19,4 +21,3 @@ type MurgoMessage struct {
 	conn *net.Conn
 
 }
-

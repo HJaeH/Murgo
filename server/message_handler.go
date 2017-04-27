@@ -28,7 +28,7 @@ func NewMessageHandler(supervisor *Supervisor) *MessageHandler {
 }
 
 func (messageHandler *MessageHandler) startMassageHandler() {
-	// TODO : panic 발생시 모든 모듈의 이 시점으로 리턴할 것
+	 // panic 발생시 모든 모듈의 이 시점으로 리턴할 것
 	// TODO : 일단 에러 발생 시점 파악을 위해 주석처리 이후에 슈퍼바이저에서 코드 통합 강구
 	/*defer func(){
 		if err:= recover(); err!= nil{
@@ -50,7 +50,7 @@ func (messageHandler *MessageHandler) startMassageHandler() {
 func (messageHandler *MessageHandler) handleCast(castData interface{}) {
 	switch t := castData.(type) {
 	default:
-		fmt.Printf("unexpected type %T", t)
+		panic("Handling cast of unexpected type in message handler")
 	case *Message:
 		msg := castData.(*Message)
 		messageHandler.handleMassage(msg)
@@ -61,15 +61,15 @@ func (messageHandler *MessageHandler) handleMassage(msg *Message) {
 
 	switch msg.kind {
 	case mumbleproto.MessageAuthenticate:
-		messageHandler.handleAuthenticate(msg)
+		messageHandler.handleAuthenticateMessage(msg)
 	case mumbleproto.MessagePing:
-		messageHandler.handlePing(msg)
+		messageHandler.handlePingMessage(msg)
 	case mumbleproto.MessageChannelRemove:
 		messageHandler.handleChannelRemoveMessage(msg)
 	case mumbleproto.MessageChannelState:
 		messageHandler.handleChannelStateMessage(msg)
 	case mumbleproto.MessageUserState:
-		messageHandler.handleUserState(msg)
+		messageHandler.handleUserStateMessage(msg)
 	case mumbleproto.MessageUserRemove:
 		messageHandler.handleUserRemoveMessage(msg)
 	case mumbleproto.MessageBanList:
@@ -98,7 +98,7 @@ func (messageHandler *MessageHandler) handleMassage(msg *Message) {
 }
 
 ////Authenticate message handling
-func (messageHandler *MessageHandler) handleAuthenticate(msg *Message) {
+func (messageHandler *MessageHandler) handleAuthenticateMessage(msg *Message) {
 
 	authenticate := &mumbleproto.Authenticate{}
 	err := proto.Unmarshal(msg.buf, authenticate)
@@ -169,7 +169,7 @@ func (messageHandler *MessageHandler) handleAuthenticate(msg *Message) {
 	}
 }
 
-func (messageHandler *MessageHandler) handlePing(msg *Message) {
+func (messageHandler *MessageHandler) handlePingMessage(msg *Message) {
 	ping := &mumbleproto.Ping{}
 	err := proto.Unmarshal(msg.buf, ping)
 	if err != nil {
@@ -188,7 +188,7 @@ func (messageHandler *MessageHandler) handlePing(msg *Message) {
 	})
 }
 
-func (messageHandler *MessageHandler) handleUserState(msg *Message) {
+func (messageHandler *MessageHandler) handleUserStateMessage(msg *Message) {
 
 	// 메시지를 보낸 유저 reset idle -> 이 부분은 통합
 	userstate := &mumbleproto.UserState{}
@@ -197,8 +197,16 @@ func (messageHandler *MessageHandler) handleUserState(msg *Message) {
 		//
 		return
 	}
-
 	fmt.Println("userstate info:", userstate, "msg id :", msg.testCounter, "from:", msg.client.userName)
+	//Channel ID 필드 값이 있는 경우
+	if userstate.ChannelId != nil {
+		messageHandler.supervisor.cm.Cast <- &MurgoMessage{
+			kind:      userEnterChannel,
+			channelId: int(*userstate.ChannelId),
+			client:    msg.client, // temp target
+		}
+	}
+
 
 	clients := messageHandler.supervisor.tc
 	channelManager := messageHandler.supervisor.cm
@@ -211,6 +219,9 @@ func (messageHandler *MessageHandler) handleUserState(msg *Message) {
 
 	//actor는 메시지를 보낸 클라이언트
 	//target은 메세지 패킷의 session
+
+
+
 	target := actor
 	if userstate.Session != nil {
 		// target -> 메시지의 session에 해당하는 client 메시지의 대상. sender일 수도 있고 아닐 수도 있다
@@ -220,18 +231,13 @@ func (messageHandler *MessageHandler) handleUserState(msg *Message) {
 			return
 		}
 	}
+
+
+
+
 	userstate.Session = proto.Uint32(target.Session())
 	userstate.Actor = proto.Uint32(actor.Session())
 
-	//Channel ID 필드 값이 있는 경우
-	if userstate.ChannelId != nil {
-
-		channelManager.Cast <- &MurgoMessage{
-			kind:      userEnterChannel,
-			channelId: int(*userstate.ChannelId),
-			client:    target,
-		}
-	}
 
 	tempUserState := &mumbleproto.UserState{}
 	if userstate.Mute != nil {
@@ -282,7 +288,6 @@ func (messageHandler *MessageHandler) handleChannelStateMessage(msg *Message) {
 			ChannelName: *channelStateMsg.Name,
 			client:      msg.client,
 		}
-		messageHandler.supervisor.cm.printChannels()
 	}
 }
 func (messageHandler *MessageHandler) handleUserStatsMessage(msg *Message) {

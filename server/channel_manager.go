@@ -60,7 +60,7 @@ const ( // TODO : keep other module from accessing those, enum or name space,,,,
 // channel receiving loop
 func (channelManager *ChannelManager) startChannelManager() {
 
-	// TODO : panic 발생시 모든 모듈의 이 시점으로 리턴할 것
+	// panic 발생시 모든 모듈의 이 시점으로 리턴할 것
 	// TODO : 일단 에러 발생 시점 파악을 위해 주석처리 이후에 슈퍼바이저에서 코드 통합 강구
 	/*defer func(){
 		if err:= recover(); err!= nil{
@@ -84,7 +84,7 @@ func (channelManager *ChannelManager) handleCast(castData interface{}) {
 
 	switch murgoMsg.kind {
 	default:
-		fmt.Printf("unexpected type ")
+		panic("Handling cast of unexpected type in channel manager")
 	case addChannel:
 		channelManager.addChannel(murgoMsg.ChannelName, murgoMsg.client)
 	case userEnterChannel:
@@ -97,7 +97,6 @@ func (channelManager *ChannelManager) handleCast(castData interface{}) {
 
 }
 
-// APIs
 func (channelManager *ChannelManager) addChannel(channelName string, client *TlsClient) {
 	for _, eachChannel := range channelManager.channelList {
 		if eachChannel.Name == channelName {
@@ -106,24 +105,22 @@ func (channelManager *ChannelManager) addChannel(channelName string, client *Tls
 			return
 		}
 	}
-
+	// create new channel
 	channel := NewChannel(channelManager.nextChannelID, channelName)
 	channelManager.nextChannelID++
 	channelManager.channelList[channel.Id] = channel
-	// TODO : Add two data to channel structure
-	//channel.Position = *(int32(channelStateMsg.Position))
-	//channel.temporary = *channelStateMsg.Temporary
 
-	channelStateMsg := channel.ToChannelState()
+
 	//let all session know the created channel
+	channelStateMsg := channel.ToChannelState()
 	channelManager.supervisor.sm.Cast <- &MurgoMessage{
 		kind: broadcastMessage,
 		msg:  channelStateMsg,
 	}
-	//channelManager.broadCastChannel(channel.Id, channelstateMsg)
+
+	//let the channel creator enter the channel
 	channelManager.userEnterChannel(channel.Id, client)
 
-	return
 }
 
 func (channelManager *ChannelManager) RootChannel() *Channel {
@@ -150,6 +147,7 @@ func (channelManager *ChannelManager) broadCastChannelWithoutMe(channelId int, m
 	if err != nil {
 		fmt.Println(err)
 	}
+	fmt.Println(channel.clients)
 	for _, eachClient := range channel.clients {
 		if reflect.DeepEqual(client, eachClient) {
 			continue
@@ -176,12 +174,15 @@ func (channelManager *ChannelManager) sendChannelList(client *TlsClient) {
 
 func (channelManager *ChannelManager) userEnterChannel(channelId int, client *TlsClient) {
 
+
+
 	newChannel, err := channelManager.channel(channelId)
+	fmt.Println(client.userName, " will enter ", newChannel.Name)
 	if err != nil {
 		panic("Channel Id doesn't exist")
 	}
 	oldChannel := client.channel
-	fmt.Println("newchan:", newChannel.Name)
+
 	if oldChannel == newChannel {
 		return
 	}
@@ -190,7 +191,7 @@ func (channelManager *ChannelManager) userEnterChannel(channelId int, client *Tl
 		oldChannel.removeClient(client)
 		if oldChannel.IsEmpty() {
 			channelManager.removeChannel(oldChannel)
-
+			oldChannel = nil
 		}
 	}
 
@@ -203,12 +204,21 @@ func (channelManager *ChannelManager) userEnterChannel(channelId int, client *Tl
 		channelManager.broadCastChannelWithoutMe(oldChannel.Id, userState, client)
 	}
 	// 변한 상태를 클라이언트에게 알림
-	client.sendMessage(client.ToUserState())
+
 
 	if newChannel.Id != ROOT_CHANNEL {
-		//새 채널입장을 알림
-		channelManager.broadCastChannel(newChannel.Id, userState)
+		//새 채널입장을 채널 유저들에게 알림
+		channelManager.broadCastChannelWithoutMe(newChannel.Id, userState, client)
+		//채널에 있는 유저들을 입장하는 유저에게 알림
+		newChannel.sendUserListInChannel(client)
 	}
+
+	for _, eachUser := range newChannel.clients {
+		fmt.Println("users in chan", eachUser.userName)
+	}
+	client.sendMessage(client.ToUserState())
+	fmt.Println("-------")
+
 
 }
 
@@ -251,7 +261,11 @@ func (channelManager *ChannelManager) removeChannel(channel *Channel) {
 }
 
 func (channelManager *ChannelManager) printChannels() {
+	fmt.Println("channel list : ")
 	for _, channel := range channelManager.channelList {
-		fmt.Print(channel, ":: ")
+		fmt.Print(channel.Name, ", ")
 	}
+	fmt.Println()
 }
+
+
