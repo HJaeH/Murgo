@@ -1,3 +1,6 @@
+// @author 허재화 <jhwaheo@smilegate.com>
+// @version 1.0
+// murgo tls client module
 
 package server
 
@@ -6,12 +9,14 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"github.com/golang/protobuf/proto"
 	"net"
 	"io"
-	"mumble.info/grumble/pkg/mumbleproto"
 	"bufio"
+
 	"murgo/config"
+	"murgo/pkg/mumbleproto"
+
+	"github.com/golang/protobuf/proto"
 )
 
 

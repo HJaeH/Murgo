@@ -1,3 +1,6 @@
+// @author 허재화 <jhwaheo@smilegate.com>
+// @version 1.0
+// server tls accept server
 
 package server
 
@@ -8,7 +11,7 @@ import (
 	"log"
 
 	"murgo/config"
-	"mumble.info/grumble/pkg/sessionpool"
+	"murgo/pkg/sessionpool"
 )
 
 type TlsServer struct {

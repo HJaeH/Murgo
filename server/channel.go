@@ -1,8 +1,9 @@
 package server
 
 import (
+	"murgo/pkg/mumbleproto"
+
 	"github.com/golang/protobuf/proto"
-	"mumble.info/grumble/pkg/mumbleproto"
 
 )
 

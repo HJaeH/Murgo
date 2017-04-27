@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"net"
 
-	"mumble.info/grumble/pkg/mumbleproto"
 	"murgo/config"
+	"murgo/pkg/mumbleproto"
+	"murgo/pkg/sessionpool"
 
 	"github.com/golang/protobuf/proto"
-	"mumble.info/grumble/pkg/sessionpool"
 )
 
 type SessionManager struct {
