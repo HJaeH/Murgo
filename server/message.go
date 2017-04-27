@@ -19,5 +19,6 @@ type MurgoMessage struct {
 	msg interface{}
 	ChannelName string
 	conn *net.Conn
+	castReply chan interface{}
 
 }

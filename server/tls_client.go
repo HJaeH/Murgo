@@ -194,7 +194,7 @@ func (tlsClient *TlsClient) Disconnect() {
 func (tlsClient *TlsClient) ToUserState()(*mumbleproto.UserState) {
 
 	userStateMsg := &mumbleproto.UserState{
-		Session: proto.Uint32(tlsClient.Session()),
+		Session: proto.Uint32(tlsClient.session),
 		Name: proto.String(tlsClient.userName),
 		UserId: proto.Uint32(uint32(tlsClient.userId)),
 		ChannelId:proto.Uint32(uint32(tlsClient.channel.Id)),

@@ -62,13 +62,12 @@ func (channelManager *ChannelManager) startChannelManager() {
 
 	// panic 발생시 모든 모듈의 이 시점으로 리턴할 것
 	// TODO : 일단 에러 발생 시점 파악을 위해 주석처리 이후에 슈퍼바이저에서 코드 통합 강구
-	/*defer func(){
+	defer func(){
 		if err:= recover(); err!= nil{
 			fmt.Println("Channel manager recovered")
 			channelManager.startChannelManager()
 		}
 	}()
-	*/
 
 	for {
 		select {
@@ -174,8 +173,6 @@ func (channelManager *ChannelManager) sendChannelList(client *TlsClient) {
 
 func (channelManager *ChannelManager) userEnterChannel(channelId int, client *TlsClient) {
 
-
-
 	newChannel, err := channelManager.channel(channelId)
 	fmt.Println(client.userName, " will enter ", newChannel.Name)
 	if err != nil {
@@ -195,10 +192,13 @@ func (channelManager *ChannelManager) userEnterChannel(channelId int, client *Tl
 		}
 	}
 
-	newChannel.addClient(client)
-	client.channel = newChannel
 
+
+	client.channel = newChannel
+	newChannel.addClient(client)
 	userState := client.ToUserState()
+
+
 	if oldChannel != nil && oldChannel.Id != ROOT_CHANNEL {
 		//이전 채널에 떠났음을 알림
 		channelManager.broadCastChannelWithoutMe(oldChannel.Id, userState, client)
@@ -210,16 +210,23 @@ func (channelManager *ChannelManager) userEnterChannel(channelId int, client *Tl
 		//새 채널입장을 채널 유저들에게 알림
 		channelManager.broadCastChannelWithoutMe(newChannel.Id, userState, client)
 		//채널에 있는 유저들을 입장하는 유저에게 알림
-		newChannel.sendUserListInChannel(client)
+		//newChannel.sendUserListInChannel(client)
+		for _, users := range newChannel.clients {
+			client.sendMessage(users.ToUserState())
+
+		}
+	} else {
+		client.sendMessage(userState)
 	}
 
-	for _, eachUser := range newChannel.clients {
-		fmt.Println("users in chan", eachUser.userName)
-	}
-	client.sendMessage(client.ToUserState())
-	fmt.Println("-------")
-
-
+	//for test
+	/*for _, eachChannel := range channelManager.channelList{
+		fmt.Print(eachChannel.Name, ": ")
+		for _, eachUser := range eachChannel.clients {
+			fmt.Print(eachUser.userName, ", ")
+		}
+		fmt.Println()
+	}*/
 }
 
 func (channelManager *ChannelManager) removeChannel(channel *Channel) {
@@ -267,5 +274,7 @@ func (channelManager *ChannelManager) printChannels() {
 	}
 	fmt.Println()
 }
+
+
 
 

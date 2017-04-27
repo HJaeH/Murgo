@@ -30,12 +30,12 @@ func NewMessageHandler(supervisor *Supervisor) *MessageHandler {
 func (messageHandler *MessageHandler) startMassageHandler() {
 	 // panic 발생시 모든 모듈의 이 시점으로 리턴할 것
 	// TODO : 일단 에러 발생 시점 파악을 위해 주석처리 이후에 슈퍼바이저에서 코드 통합 강구
-	/*defer func(){
+	defer func(){
 		if err:= recover(); err!= nil{
 			fmt.Println("Message Handler recovered")
 			messageHandler.startMassageHandler()
 		}
-	}()*/
+	}()
 
 	fmt.Println("Message Handler stared")
 	for {
@@ -48,7 +48,7 @@ func (messageHandler *MessageHandler) startMassageHandler() {
 }
 
 func (messageHandler *MessageHandler) handleCast(castData interface{}) {
-	switch t := castData.(type) {
+	switch castData.(type) {
 	default:
 		panic("Handling cast of unexpected type in message handler")
 	case *Message:
@@ -336,13 +336,33 @@ func (messageHandler *MessageHandler) handleBanListMessage(msg *Message) {
 
 //TODO : deal with sending text message
 func (messageHandler *MessageHandler) handleTextMessage(msg *Message) {
-	msgProto := &mumbleproto.TextMessage{}
-	err := proto.Unmarshal(msg.buf, msgProto)
+	textMsg := &mumbleproto.TextMessage{}
+	err := proto.Unmarshal(msg.buf, textMsg)
 	if err != nil {
-		fmt.Println(err)
+		panic(err)
 		return
 	}
-	fmt.Println("Text msg info:", msgProto, "from:", msg.client.userName)
+	fmt.Println("Text msg info:", textMsg, "from:", msg.client.userName)
+
+	if textMsg.ChannelId != nil {
+		newMsg := mumbleproto.TextMessage{
+			Actor:textMsg.Actor,
+			Session:textMsg.Session,
+			ChannelId: textMsg.ChannelId,
+			Message: textMsg.Message,
+		}
+		messageHandler.supervisor.cm.Cast <- &MurgoMessage{
+			kind:broadCastChannel,
+			msg:newMsg,
+			channelId:int(textMsg.ChannelId[0]),
+		}
+	} else if textMsg.Session != nil {
+
+	}
+
+
+
+
 
 }
 

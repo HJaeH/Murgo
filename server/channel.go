@@ -1,11 +1,11 @@
 package server
 
 import (
+	"fmt"
+
 	"murgo/pkg/mumbleproto"
 
 	"github.com/golang/protobuf/proto"
-
-	"reflect"
 )
 
 
@@ -70,10 +70,13 @@ func (channel *Channel) ToChannelState() (*mumbleproto.ChannelState) {
 
 
 func (channel *Channel) sendUserListInChannel(client *TlsClient) {
+	fmt.Println(channel.Name)
 	for _, eachUser := range channel.clients {
-		if reflect.DeepEqual(eachUser, client) {
+		fmt.Print(eachUser.userName)
+		/*if reflect.DeepEqual(eachUser, client) {
 			continue
-		}
+		}*/
+		fmt.Println("client list: ", client.userName)
 		err := client.sendMessage(eachUser.ToUserState())
 		if err != nil {
 			panic(" Error sending channel User list")
