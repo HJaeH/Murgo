@@ -12,9 +12,20 @@ import (
 	"murgo/pkg/mumbleproto"
 
 	"github.com/golang/protobuf/proto"
+	"murgo/pkg/servermodule"
 )
 
+
+type CM interface {
+	userEnterChannel()
+
+}
+
+
 type ChannelManager struct {
+
+	*servermodule.GenServer
+
 	supervisor *Supervisor
 
 	channelList   map[int]*Channel
@@ -27,6 +38,11 @@ type ChannelManager struct {
 }
 
 const ROOT_CHANNEL = 0
+
+type channelApi interface {
+	addChannel(string, *TlsClient)
+	RootChannel() *Channel
+}
 
 func NewChannelManager(supervisor *Supervisor) *ChannelManager {
 
@@ -60,8 +76,7 @@ const ( // TODO : keep other module from accessing those, enum or name space,,,,
 // channel receiving loop
 func (channelManager *ChannelManager) startChannelManager() {
 
-	// panic 발생시 모든 모듈의 이 시점으로 리턴할 것
-	// TODO : 일단 에러 발생 시점 파악을 위해 주석처리 이후에 슈퍼바이저에서 코드 통합 강구
+
 	defer func(){
 		if err:= recover(); err!= nil{
 			fmt.Println("Channel manager recovered")
@@ -77,9 +92,20 @@ func (channelManager *ChannelManager) startChannelManager() {
 	}
 }
 
-// TODO : cast data could be a function .
+/*
+type messenger interface {
+	startMessageHandler()
+	handleCast1()
+
+}
+
+
+func (channelManager *ChannelManager) handleCast1 (){
+	messenger.handleCast1(3)
+}*/
 func (channelManager *ChannelManager) handleCast(castData interface{}) {
 	murgoMsg := castData.(*MurgoMessage)
+
 
 	switch murgoMsg.kind {
 	default:
@@ -93,7 +119,6 @@ func (channelManager *ChannelManager) handleCast(castData interface{}) {
 	case sendChannelList:
 		channelManager.sendChannelList(murgoMsg.client)
 	}
-
 }
 
 func (channelManager *ChannelManager) addChannel(channelName string, client *TlsClient) {
@@ -276,3 +301,7 @@ func (channelManager *ChannelManager) printChannels() {
 
 
 
+//func  (cm *CM)userEnterChannel() {
+//	a := new(CM)
+//	a.userEnterChannel()
+//}

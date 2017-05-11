@@ -17,10 +17,14 @@ import (
 	"murgo/pkg/mumbleproto"
 
 	"github.com/golang/protobuf/proto"
+	"fmt"
+	"murgo/pkg/servermodule"
 )
 
 
 type TlsClient struct {
+	servermodule.GenServer
+
 	supervisor *Supervisor
 
 	// 유저가 접속중인 channel
@@ -60,9 +64,14 @@ type TlsClient struct {
 	//for test
 	testCounter int
 
-
+	clientAction
 }
 
+type clientAction interface{
+	PrintClient(m string) ()
+
+
+}
 
 // called at session manager
 func NewTlsClient(conn *net.Conn, session uint32, supervisor *Supervisor) (*TlsClient){
@@ -85,6 +94,8 @@ func NewTlsClient(conn *net.Conn, session uint32, supervisor *Supervisor) (*TlsC
 }
 
 func (tlsClient *TlsClient) recvLoop(){
+
+	tlsClient.PrintClient("dasdfd")
 	for {
 		msg, err := tlsClient.readProtoMessage()
 		if err != nil {
@@ -99,12 +110,19 @@ func (tlsClient *TlsClient) recvLoop(){
 		}
 
 		tlsClient.supervisor.mh.Cast <- msg
+		//tlsClient.Cast()
 
 	}
+
+
 }
 
 
-///// internal functions
+func (tlsClient *TlsClient) PrintClient(m string){
+	fmt.Println(m)
+}
+
+
 //send msg to client
 func (tlsClient *TlsClient) sendMessage(msg interface{}) error {
 
@@ -211,3 +229,5 @@ func (tlsClient *TlsClient) ToUserState()(*mumbleproto.UserState) {
 func (tlsClient *TlsClient) Session()(uint32) {
 	return tlsClient.session
 }
+
+
