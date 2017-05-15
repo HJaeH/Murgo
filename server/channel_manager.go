@@ -10,9 +10,10 @@ import (
 	"reflect"
 
 	"murgo/pkg/mumbleproto"
+	"murgo/pkg/servermodule"
 
 	"github.com/golang/protobuf/proto"
-	"murgo/pkg/servermodule"
+
 )
 
 
@@ -26,31 +27,31 @@ type ChannelManager struct {
 
 	*servermodule.GenServer
 
-	supervisor *Supervisor
+	supervisor *MurgoSupervisor
 
 	channelList   map[int]*Channel
 	nextChannelID int
 
 	Cast chan interface{}
-	Call chan interface{}
+	//Call chan interface{}
 
 	rootChannel *Channel
 }
 
 const ROOT_CHANNEL = 0
 
-type channelApi interface {
-	addChannel(string, *TlsClient)
-	RootChannel() *Channel
-}
+//type channelApi interface {
+//	addChannel(string, *TlsClient)
+//	RootChannel() *Channel
+//}
 
-func NewChannelManager(supervisor *Supervisor) *ChannelManager {
+func NewChannelManager(supervisor *MurgoSupervisor) *ChannelManager {
 
 	//assign heap
 	channelManager := new(ChannelManager)
 	channelManager.channelList = make(map[int]*Channel)
 	channelManager.Cast = make(chan interface{})
-	channelManager.Call = make(chan interface{})
+	//channelManager.Call = make(chan interface{})
 
 	// set uservisor
 	channelManager.supervisor = supervisor
@@ -74,13 +75,13 @@ const ( // TODO : keep other module from accessing those, enum or name space,,,,
 )
 
 // channel receiving loop
-func (channelManager *ChannelManager) startChannelManager() {
+func (channelManager *ChannelManager) StartChannelManager() {
 
-
+	// todo : running 추가 또는 젠서버로 통일
 	defer func(){
 		if err:= recover(); err!= nil{
 			fmt.Println("Channel manager recovered")
-			channelManager.startChannelManager()
+			channelManager.StartChannelManager()
 		}
 	}()
 
@@ -107,19 +108,24 @@ func (channelManager *ChannelManager) handleCast(castData interface{}) {
 	murgoMsg := castData.(*MurgoMessage)
 
 
-	switch murgoMsg.kind {
+	switch murgoMsg.Kind {
 	default:
 		panic("Handling cast of unexpected type in channel manager")
 	case addChannel:
-		channelManager.addChannel(murgoMsg.ChannelName, murgoMsg.client)
+		fmt.Println(murgoMsg.FuncName)
+		channelManager.addChannel(murgoMsg.ChannelName, murgoMsg.Client)
 	case userEnterChannel:
-		channelManager.userEnterChannel(murgoMsg.channelId, murgoMsg.client)
+		channelManager.userEnterChannel(murgoMsg.ChannelId, murgoMsg.Client)
 	case broadCastChannel:
-		channelManager.broadCastChannel(murgoMsg.channelId, murgoMsg.msg)
+		channelManager.broadCastChannel(murgoMsg.ChannelId, murgoMsg.Msg)
 	case sendChannelList:
-		channelManager.sendChannelList(murgoMsg.client)
+		channelManager.sendChannelList(murgoMsg.Client)
+
 	}
 }
+
+
+
 
 func (channelManager *ChannelManager) addChannel(channelName string, client *TlsClient) {
 	for _, eachChannel := range channelManager.channelList {
@@ -137,9 +143,9 @@ func (channelManager *ChannelManager) addChannel(channelName string, client *Tls
 
 	//let all session know the created channel
 	channelStateMsg := channel.ToChannelState()
-	channelManager.supervisor.sm.Cast <- &MurgoMessage{
-		kind: broadcastMessage,
-		msg:  channelStateMsg,
+	channelManager.supervisor.sessionManager.Cast <- &MurgoMessage{
+		Kind: broadcastMessage,
+		Msg:  channelStateMsg,
 	}
 
 	//let the channel creator enter the channel
@@ -162,7 +168,7 @@ func (channelManager *ChannelManager) broadCastChannel(channelId int, msg interf
 		fmt.Println(err)
 	}
 	for _, client := range channel.clients {
-		client.sendMessage(msg)
+		client.SendMessage(msg)
 	}
 }
 
@@ -176,7 +182,7 @@ func (channelManager *ChannelManager) broadCastChannelWithoutMe(channelId int, m
 		if reflect.DeepEqual(client, eachClient) {
 			continue
 		}
-		eachClient.sendMessage(msg)
+		eachClient.SendMessage(msg)
 	}
 }
 
@@ -192,18 +198,18 @@ func (channelManager *ChannelManager) sendChannelList(client *TlsClient) {
 	fmt.Println(len(channelManager.channelList))
 	for _, eachChannel := range channelManager.channelList {
 
-		client.sendMessage(eachChannel.ToChannelState())
+		client.SendMessage(eachChannel.ToChannelState())
 	}
 }
 
 func (channelManager *ChannelManager) userEnterChannel(channelId int, client *TlsClient) {
 
 	newChannel, err := channelManager.channel(channelId)
-	fmt.Println(client.userName, " will enter ", newChannel.Name)
+	fmt.Println(client.UserName, " will enter ", newChannel.Name)
 	if err != nil {
 		panic("Channel Id doesn't exist")
 	}
-	oldChannel := client.channel
+	oldChannel := client.Channel
 
 	if oldChannel == newChannel {
 		return
@@ -217,7 +223,7 @@ func (channelManager *ChannelManager) userEnterChannel(channelId int, client *Tl
 		}
 	}
 
-	client.channel = newChannel
+	client.Channel = newChannel
 	newChannel.addClient(client)
 	userState := client.ToUserState()
 
@@ -238,15 +244,17 @@ func (channelManager *ChannelManager) userEnterChannel(channelId int, client *Tl
 			client.sendMessage(users.ToUserState())
 
 		}*/
+		//client.SendMessage(userState)
 	} else {
-		client.sendMessage(userState)
+		fmt.Println("-------------------")
+		client.SendMessage(userState)
 	}
 
 	//for test
 	for _, eachChannel := range channelManager.channelList{
 		fmt.Print(eachChannel.Name, ": ")
 		for _, eachUser := range eachChannel.clients {
-			fmt.Print(eachUser.userName, ", ")
+			fmt.Print(eachUser.UserName, ", ")
 		}
 		fmt.Println()
 	}
@@ -267,9 +275,11 @@ func (channelManager *ChannelManager) removeChannel(channel *Channel) {
 		userStateMsg.ChannelId = proto.Uint32(uint32(ROOT_CHANNEL))
 		channelManager.userEnterChannel(ROOT_CHANNEL, client)
 
-		channelManager.supervisor.sm.Cast <- &MurgoMessage{
-			kind: broadcastMessage,
-			msg:  userStateMsg,
+		//channelManager.Call(channelManager.supervisor.sessionManager)
+
+		channelManager.supervisor.sessionManager.Cast <- &MurgoMessage{
+			Kind: broadcastMessage,
+			Msg:  userStateMsg,
 		}
 	}
 
@@ -284,9 +294,9 @@ func (channelManager *ChannelManager) removeChannel(channel *Channel) {
 	channelRemoveMsg := &mumbleproto.ChannelRemove{
 		ChannelId: proto.Uint32(uint32(channel.Id)),
 	}
-	channelManager.supervisor.sm.Cast <- &MurgoMessage{
-		kind: broadcastMessage,
-		msg:  channelRemoveMsg,
+	channelManager.supervisor.sessionManager.Cast <- &MurgoMessage{
+		Kind: broadcastMessage,
+		Msg:  channelRemoveMsg,
 	}
 }
 

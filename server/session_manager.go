@@ -7,19 +7,16 @@ import (
 	"murgo/config"
 	"murgo/pkg/mumbleproto"
 	"murgo/pkg/sessionpool"
+	"murgo/pkg/servermodule"
 
 	"github.com/golang/protobuf/proto"
 )
 
 type SessionManager struct {
-	supervisor *Supervisor
 
+	*servermodule.GenServer
 	clientList map[uint32] *TlsClient
-
 	sessionPool *sessionpool.SessionPool
-
-
-
 	Cast chan interface{}
 	Call chan interface{}
 
@@ -28,10 +25,12 @@ type SessionManager struct {
 
 
 
-func NewSessionManager (supervisor *Supervisor)(*SessionManager) {
+func NewSessionManager()(*SessionManager) {
+
 	sessionManager := new(SessionManager)
+	sessionManager.GenServer = servermodule.NewGenServer(sessionManager)
+
 	sessionManager.Cast = make(chan interface{})
-	sessionManager.supervisor = supervisor
 	sessionManager.sessionPool = sessionpool.New()
 	sessionManager.clientList = make(map[uint32] *TlsClient)
 	return sessionManager
@@ -83,13 +82,13 @@ func (sessionManager *SessionManager)handle(F func(int, int)() ) {
 func (sessionManager *SessionManager)handleCast(castData interface{}) {
 	murgoMsg := castData.(*MurgoMessage)
 
-	switch  murgoMsg.kind {
+	switch  murgoMsg.Kind {
 	default:
-		fmt.Printf("unexpected type %T", murgoMsg.kind)
+		fmt.Printf("unexpected type %T", murgoMsg.Kind)
 	case broadcastMessage:
-		sessionManager.broadcastMessage(murgoMsg.msg)
+		sessionManager.broadcastMessage(murgoMsg.Msg)
 	case handleIncomingClient:
-		sessionManager.handleIncomingClient(murgoMsg.conn)
+		sessionManager.handleIncomingClient(murgoMsg.Conn)
 	}
 }
 
@@ -98,8 +97,8 @@ func (sessionManager *SessionManager)handleIncomingClient(conn *net.Conn){
 
 	//init tls client
 	session := sessionManager.sessionPool.Get()
-	client := NewTlsClient(conn, session, sessionManager.supervisor)
-
+	//client := NewTlsClient(conn, session, sessionManager.supervisor)
+	client := NewTlsClient(conn, session)
 	sessionManager.clientList[session] = client
 	// send version information
 	version := &mumbleproto.Version{
@@ -107,7 +106,7 @@ func (sessionManager *SessionManager)handleIncomingClient(conn *net.Conn){
 		Release:     proto.String("Murgo"),
 		CryptoModes: config.SupportedModes(),
 	}
-	err := client.sendMessage(version)
+	err := client.SendMessage(version)
 	if err != nil {
 		fmt.Println("Error sending message to client")
 	}
@@ -127,7 +126,7 @@ func (sessionManager *SessionManager) broadcastMessage(msg interface{}){
 		/*if client.state < StateClientAuthenticated {
 			continue
 		}*/
-		eachClient.sendMessage(msg)
+		eachClient.SendMessage(msg)
 	}
 }
 // todo : cast time.Time type to number type or check overlaoding

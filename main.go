@@ -17,8 +17,12 @@ import (
 
 func main() {
 
-	supervisor := server.NewSupervisor()
-	go supervisor.StartSupervisor()
+	//supervisor := server.NewSupervisor()
+	supervisor := new(server.MurgoSupervisor)
+	supervisor.Init()
+
+	//start the genserver of supervisor
+	supervisor.StartSupervisor()
 
 	c := make(chan os.Signal, 2)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)

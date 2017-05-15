@@ -6,6 +6,7 @@ import (
 	"murgo/pkg/mumbleproto"
 
 	"github.com/golang/protobuf/proto"
+
 )
 
 
@@ -50,7 +51,7 @@ func (channel *Channel) IsEmpty() bool {
 
 func (channel *Channel) removeClient(client *TlsClient) {
 	delete(channel.clients, client.Session())
-	client.channel = nil
+	client.Channel = nil
 }
 func (channel *Channel) addClient(client *TlsClient){
 	channel.clients[client.Session()] = client
@@ -72,12 +73,12 @@ func (channel *Channel) ToChannelState() (*mumbleproto.ChannelState) {
 func (channel *Channel) sendUserListInChannel(client *TlsClient) {
 	fmt.Println(channel.Name)
 	for _, eachUser := range channel.clients {
-		fmt.Print(eachUser.userName)
+		fmt.Print(eachUser.UserName)
 		/*if reflect.DeepEqual(eachUser, client) {
 			continue
 		}*/
-		fmt.Println("client list: ", client.userName)
-		err := client.sendMessage(eachUser.ToUserState())
+		fmt.Println("client list: ", client.UserName)
+		err := client.SendMessage(eachUser.ToUserState())
 		if err != nil {
 			panic(" Error sending channel User list")
 		}

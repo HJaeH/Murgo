@@ -12,12 +12,15 @@ type Message struct {
 }
 
 type MurgoMessage struct {
-	kind uint16
-	channelId int
-	client *TlsClient
-	channel *Channel
-	msg interface{}
+	FuncName    string
+
+
+	Kind        uint16
+	ChannelId   int
+	Client      *TlsClient
+	Channel     *Channel
+	Msg         interface{}
 	ChannelName string
-	conn *net.Conn
-	castReply chan interface{}
+	Conn        *net.Conn
+	CastReply   chan interface{}
 }

@@ -14,7 +14,7 @@ import (
 
 
 type MessageHandler struct {
-	supervisor *Supervisor
+	supervisor *MurgoSupervisor
 
 	Cast chan interface{}
 	Call chan interface{}
@@ -23,7 +23,7 @@ type messageHandling interface{
 
 }
 
-func NewMessageHandler(supervisor *Supervisor) *MessageHandler {
+func NewMessageHandler(supervisor *MurgoSupervisor) *MessageHandler {
 
 	messageHandler := new(MessageHandler)
 	messageHandler.supervisor = supervisor
@@ -34,13 +34,13 @@ func NewMessageHandler(supervisor *Supervisor) *MessageHandler {
 
 func (messageHandler *MessageHandler) startMassageHandler() {
 	 // panic 리턴
-	defer func(){
+	/*defer func(){
 		if err:= recover(); err!= nil{
 			fmt.Println("Message Handler recovered")
 			messageHandler.startMassageHandler()
 		}
 	}()
-
+*/
 	fmt.Println("Message Handler stared")
 	for {
 		select {
@@ -115,9 +115,9 @@ func (messageHandler *MessageHandler) handleAuthenticateMessage(msg *Message) {
 	// crypto setup
 	client := msg.client
 
-	client.userName = *authenticate.Username
+	client.UserName = *authenticate.Username
 	client.cryptState.GenerateKey()
-	err = client.sendMessage(&mumbleproto.CryptSetup{
+	err = client.SendMessage(&mumbleproto.CryptSetup{
 		Key:         client.cryptState.Key(),
 		ClientNonce: client.cryptState.EncryptIV(),
 		ServerNonce: client.cryptState.DecryptIV(),
@@ -131,7 +131,7 @@ func (messageHandler *MessageHandler) handleAuthenticateMessage(msg *Message) {
 	}
 
 	//send codec version
-	err = client.sendMessage(&mumbleproto.CodecVersion{
+	err = client.SendMessage(&mumbleproto.CodecVersion{
 		Alpha:       proto.Int32(-2147483637),
 		Beta:        proto.Int32(-2147483632),
 		PreferAlpha: proto.Bool(false),
@@ -142,22 +142,24 @@ func (messageHandler *MessageHandler) handleAuthenticateMessage(msg *Message) {
 		return
 	}
 	/// send channel state
-	messageHandler.supervisor.cm.Cast <- &MurgoMessage{
-		kind:   sendChannelList,
-		client: client,
+	messageHandler.supervisor.channelManager.Cast <- &MurgoMessage{
+		FuncName: "sendChannelList",
+		Kind:   sendChannelList,
+		Client: client,
 	}
 	// enter the root channel as default channel
-	messageHandler.supervisor.cm.Cast <- &MurgoMessage{
-		kind:      userEnterChannel,
-		client:    client,
-		channelId: ROOT_CHANNEL,
+	messageHandler.supervisor.channelManager.Cast <- &MurgoMessage{
+		FuncName: "userEnterChannel",
+		Kind:      userEnterChannel,
+		Client:    client,
+		ChannelId: ROOT_CHANNEL,
 	}
 
 	sync := &mumbleproto.ServerSync{}
 	sync.Session = proto.Uint32(uint32(client.session))
 	sync.MaxBandwidth = proto.Uint32(72000)
 	sync.WelcomeText = proto.String("Welcome to murgo server")
-	if err := client.sendMessage(sync); err != nil {
+	if err := client.SendMessage(sync); err != nil {
 		fmt.Println("error sending message")
 		return
 	}
@@ -167,7 +169,7 @@ func (messageHandler *MessageHandler) handleAuthenticateMessage(msg *Message) {
 		MessageLength: proto.Uint32(128),
 		MaxBandwidth:  proto.Uint32(240000),
 	}
-	if err := client.sendMessage(serverConfigMsg); err != nil {
+	if err := client.SendMessage(serverConfigMsg); err != nil {
 		fmt.Println("error sending message")
 		return
 	}
@@ -183,7 +185,7 @@ func (messageHandler *MessageHandler) handlePingMessage(msg *Message) {
 
 	//fmt.Println("ping info:", ping, "msg id : ", msg.testCounter)
 	client := msg.client
-	client.sendMessage(&mumbleproto.Ping{
+	client.SendMessage(&mumbleproto.Ping{
 		Timestamp: ping.Timestamp,
 		Good:      proto.Uint32(1),
 		Late:      proto.Uint32(1),
@@ -201,19 +203,19 @@ func (messageHandler *MessageHandler) handleUserStateMessage(msg *Message) {
 		//
 		return
 	}
-	fmt.Println("userstate info:", userstate, "msg id :", msg.testCounter, "from:", msg.client.userName)
+	fmt.Println("userstate info:", userstate, "msg id :", msg.testCounter, "from:", msg.client.UserName)
 	//Channel ID 필드 값이 있는 경우
 	if userstate.ChannelId != nil {
-		messageHandler.supervisor.cm.Cast <- &MurgoMessage{
-			kind:      userEnterChannel,
-			channelId: int(*userstate.ChannelId),
-			client:    msg.client, // temp target
+		messageHandler.supervisor.channelManager.Cast <- &MurgoMessage{
+			Kind:      userEnterChannel,
+			ChannelId: int(*userstate.ChannelId),
+			Client:    msg.client, // temp target
 		}
 	}
 
 
-	clients := messageHandler.supervisor.tc
-	channelManager := messageHandler.supervisor.cm
+	clients := messageHandler.supervisor.tlsClients
+	channelManager := messageHandler.supervisor.channelManager
 
 	actor, ok := clients[msg.client.Session()]
 	if !ok {
@@ -222,7 +224,7 @@ func (messageHandler *MessageHandler) handleUserStateMessage(msg *Message) {
 	}
 
 	//actor는 메시지를 보낸 클라이언트
-	//target은 메세지 패킷의 session
+	//target은 메세지 패킷의 session 값; 메시지의 대상
 
 
 
@@ -268,9 +270,9 @@ func (messageHandler *MessageHandler) handleUserStateMessage(msg *Message) {
 
 	if userstate.ChannelId != nil {
 		channelManager.Cast <- &MurgoMessage{
-			kind:      broadCastChannel,
-			channelId: int(*userstate.ChannelId),
-			msg:       newMsg,
+			Kind:      broadCastChannel,
+			ChannelId: int(*userstate.ChannelId),
+			Msg:       newMsg,
 		}
 	}
 
@@ -285,12 +287,12 @@ func (messageHandler *MessageHandler) handleChannelStateMessage(msg *Message) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("ChannelState info:", channelStateMsg, "from:", msg.client.userName)
+	fmt.Println("ChannelState info:", channelStateMsg, "from:", msg.client.UserName)
 	if channelStateMsg.ChannelId == nil && channelStateMsg.Name != nil && *channelStateMsg.Temporary == true && *channelStateMsg.Parent == 0 && *channelStateMsg.Position == 0 {
-		messageHandler.supervisor.cm.Cast <- &MurgoMessage{
-			kind:        addChannel,
+		messageHandler.supervisor.channelManager.Cast <- &MurgoMessage{
+			Kind:        addChannel,
 			ChannelName: *channelStateMsg.Name,
-			client:      msg.client,
+			Client:      msg.client,
 		}
 	}
 }
@@ -312,7 +314,7 @@ func (messageHandler *MessageHandler) handleUserStatsMessage(msg *Message) {
 		//Onlinesecs:
 		//Idlesecs:
 	}
-	client.sendMessage(newUserStatsMsg)
+	client.SendMessage(newUserStatsMsg)
 }
 
 // protocol handling dummy for UserRemoveMessage
@@ -323,7 +325,7 @@ func (messageHandler *MessageHandler) handleUserRemoveMessage(msg *Message) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("userRemoveMessage info:", msgProto, "from:", msg.client.userName)
+	fmt.Println("userRemoveMessage info:", msgProto, "from:", msg.client.UserName)
 }
 
 // protocol handling dummy for banlist message
@@ -335,7 +337,7 @@ func (messageHandler *MessageHandler) handleBanListMessage(msg *Message) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("Banlist message info:", msgProto, "from:", msg.client.userName)
+	fmt.Println("Banlist message info:", msgProto, "from:", msg.client.UserName)
 }
 
 //TODO : deal with sending text message
@@ -346,7 +348,7 @@ func (messageHandler *MessageHandler) handleTextMessage(msg *Message) {
 		panic(err)
 		return
 	}
-	fmt.Println("Text msg info:", textMsg, "from:", msg.client.userName)
+	fmt.Println("Text msg info:", textMsg, "from:", msg.client.UserName)
 
 	if textMsg.ChannelId != nil {
 		newMsg := mumbleproto.TextMessage{
@@ -355,10 +357,10 @@ func (messageHandler *MessageHandler) handleTextMessage(msg *Message) {
 			ChannelId: textMsg.ChannelId,
 			Message: textMsg.Message,
 		}
-		messageHandler.supervisor.cm.Cast <- &MurgoMessage{
-			kind:broadCastChannel,
-			msg:newMsg,
-			channelId:int(textMsg.ChannelId[0]),
+		messageHandler.supervisor.channelManager.Cast <- &MurgoMessage{
+			Kind:broadCastChannel,
+			Msg:newMsg,
+			ChannelId:int(textMsg.ChannelId[0]),
 		}
 	} else if textMsg.Session != nil {
 
@@ -379,7 +381,7 @@ func (messageHandler *MessageHandler) handleAclMessage(msg *Message) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("ACL info:", msgProto, "from:", msg.client.userName)
+	fmt.Println("ACL info:", msgProto, "from:", msg.client.UserName)
 
 }
 
@@ -392,7 +394,7 @@ func (messageHandler *MessageHandler) handleQueryUsers(msg *Message) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("Handle query users  :", msgProto, "from:", msg.client.userName)
+	fmt.Println("Handle query users  :", msgProto, "from:", msg.client.UserName)
 
 }
 
@@ -404,7 +406,7 @@ func (messageHandler *MessageHandler) handleCryptSetup(msg *Message) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("handle cryptsetup :", msgProto, "from:", msg.client.userName)
+	fmt.Println("handle cryptsetup :", msgProto, "from:", msg.client.UserName)
 
 }
 
@@ -417,7 +419,7 @@ func (messageHandler *MessageHandler) handleUserList(msg *Message) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println(" userlist :", msgProto, "from:", msg.client.userName)
+	fmt.Println(" userlist :", msgProto, "from:", msg.client.UserName)
 
 }
 
@@ -430,7 +432,7 @@ func (messageHandler *MessageHandler) handleVoiceTarget(msg *Message) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("voice target info:", msgProto, "from:", msg.client.userName)
+	fmt.Println("voice target info:", msgProto, "from:", msg.client.UserName)
 
 }
 
@@ -442,7 +444,7 @@ func (messageHandler *MessageHandler) handlePermissionQuery(msg *Message) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("permission query info:", msgProto, "from:", msg.client.userName)
+	fmt.Println("permission query info:", msgProto, "from:", msg.client.UserName)
 
 }
 
@@ -454,7 +456,7 @@ func (messageHandler *MessageHandler) handleRequestBlob(msg *Message) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("requestblob info:", msgProto, "from:", msg.client.userName)
+	fmt.Println("requestblob info:", msgProto, "from:", msg.client.UserName)
 
 }
 
@@ -465,7 +467,7 @@ func (messageHandler *MessageHandler) handleChannelRemoveMessage(msg *Message) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("channel remove info:", msgProto, "from:", msg.client.userName)
+	fmt.Println("channel remove info:", msgProto, "from:", msg.client.UserName)
 }
 
 // TODO : permission 처리 나누어서 구현
@@ -476,7 +478,7 @@ func sendPermissionDenied(client *TlsClient, denyType mumbleproto.PermissionDeni
 		Type:    &denyType,
 	}
 	fmt.Println("Permission denied ", permissionDeniedMsg)
-	err := client.sendMessage(permissionDeniedMsg)
+	err := client.SendMessage(permissionDeniedMsg)
 	if err != nil {
 		fmt.Println("Error sending messsage")
 		return

@@ -14,7 +14,7 @@ import (
 )
 
 type TlsServer struct {
-	supervisor *Supervisor
+	supervisor *MurgoSupervisor
 	sessionPool *sessionpool.SessionPool
 	tlsConfig  *tls.Config
 	Cast chan interface{}
@@ -22,7 +22,7 @@ type TlsServer struct {
 }
 
 
-func NewTlsServer(supervisor *Supervisor) (*TlsServer) {
+func NewTlsServer(supervisor *MurgoSupervisor) (*TlsServer) {
 	tlsServer := new(TlsServer)
 	tlsServer.supervisor = supervisor
 
@@ -48,16 +48,16 @@ func (tlsServer *TlsServer) startTlsServer() {
 		return
 	}
 
-	//accept loop와 cast handling 수행
+	//accept loop
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
 			fmt.Println(" Accepting a conneciton failed handling a client")
 			//continue
 		}
-		tlsServer.supervisor.sm.Cast <- &MurgoMessage{
-			kind:handleIncomingClient,
-			conn:&conn,
+		tlsServer.supervisor.sessionManager.Cast <- &MurgoMessage{
+			Kind:handleIncomingClient,
+			Conn:&conn,
 		}
 
 	}
