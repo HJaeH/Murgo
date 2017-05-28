@@ -10,10 +10,8 @@ import (
 	"murgo/pkg/mumbleproto"
 
 	"github.com/golang/protobuf/proto"
-	"murgo/server"
 	//"murgo/server/schema"
 )
-
 
 type MessageHandler struct {
 	supervisor *MurgoSupervisor
@@ -21,8 +19,7 @@ type MessageHandler struct {
 	Cast chan interface{}
 	Call chan interface{}
 }
-type messageHandling interface{
-
+type messageHandling interface {
 }
 
 func NewMessageHandler(supervisor *MurgoSupervisor) *MessageHandler {
@@ -35,14 +32,14 @@ func NewMessageHandler(supervisor *MurgoSupervisor) *MessageHandler {
 }
 
 func (messageHandler *MessageHandler) startMassageHandler() {
-	 // panic 리턴
+	// panic 리턴
 	/*defer func(){
 		if err:= recover(); err!= nil{
 			fmt.Println("Message Handler recovered")
 			messageHandler.startMassageHandler()
 		}
 	}()
-*/
+	*/
 	fmt.Println("Message Handler stared")
 	for {
 		select {
@@ -62,7 +59,6 @@ func (messageHandler *MessageHandler) handleCast(castData interface{}) {
 		messageHandler.handleMassage(msg)
 	}
 }
-
 
 func (messageHandler *MessageHandler) handleMassage(msg *Message) {
 	switch msg.kind {
@@ -146,12 +142,12 @@ func (messageHandler *MessageHandler) handleAuthenticateMessage(msg *Message) {
 	/// send channel state
 	messageHandler.supervisor.channelManager.Cast <- &MurgoMessage{
 		FuncName: "sendChannelList",
-		Kind:   sendChannelList,
-		Client: client,
+		Kind:     sendChannelList,
+		Client:   client,
 	}
 	// enter the root channel as default channel
 	messageHandler.supervisor.channelManager.Cast <- &MurgoMessage{
-		FuncName: "userEnterChannel",
+		FuncName:  "userEnterChannel",
 		Kind:      userEnterChannel,
 		Client:    client,
 		ChannelId: ROOT_CHANNEL,
@@ -215,7 +211,6 @@ func (messageHandler *MessageHandler) handleUserStateMessage(msg *Message) {
 		}
 	}
 
-
 	clients := messageHandler.supervisor.tlsClients
 	channelManager := messageHandler.supervisor.channelManager
 
@@ -228,8 +223,6 @@ func (messageHandler *MessageHandler) handleUserStateMessage(msg *Message) {
 	//actor는 메시지를 보낸 클라이언트
 	//target은 메세지 패킷의 session 값; 메시지의 대상
 
-
-
 	target := actor
 	if userstate.Session != nil {
 		// target -> 메시지의 session에 해당하는 client 메시지의 대상. sender일 수도 있고 아닐 수도 있다
@@ -240,12 +233,8 @@ func (messageHandler *MessageHandler) handleUserStateMessage(msg *Message) {
 		}
 	}
 
-
-
-
 	userstate.Session = proto.Uint32(target.Session())
 	userstate.Actor = proto.Uint32(actor.Session())
-
 
 	tempUserState := &mumbleproto.UserState{}
 	if userstate.Mute != nil {
@@ -354,23 +343,19 @@ func (messageHandler *MessageHandler) handleTextMessage(msg *Message) {
 
 	if textMsg.ChannelId != nil {
 		newMsg := mumbleproto.TextMessage{
-			Actor:textMsg.Actor,
-			Session:textMsg.Session,
+			Actor:     textMsg.Actor,
+			Session:   textMsg.Session,
 			ChannelId: textMsg.ChannelId,
-			Message: textMsg.Message,
+			Message:   textMsg.Message,
 		}
 		messageHandler.supervisor.channelManager.Cast <- &MurgoMessage{
-			Kind:broadCastChannel,
-			Msg:newMsg,
-			ChannelId:int(textMsg.ChannelId[0]),
+			Kind:      broadCastChannel,
+			Msg:       newMsg,
+			ChannelId: int(textMsg.ChannelId[0]),
 		}
 	} else if textMsg.Session != nil {
 
 	}
-
-
-
-
 
 }
 
@@ -485,6 +470,5 @@ func sendPermissionDenied(client *TlsClient, denyType mumbleproto.PermissionDeni
 		fmt.Println("Error sending messsage")
 		return
 	}
-
 
 }

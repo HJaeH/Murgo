@@ -1,5 +1,6 @@
 package schema
 
+/*
 import (
 	"net"
 	"bufio"
@@ -101,3 +102,4 @@ type BandWidth struct {
 	idle_timer time.Time
 	online_timer time.Time
 }
+*/

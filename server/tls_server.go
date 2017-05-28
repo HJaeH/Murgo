@@ -4,19 +4,14 @@
 
 package server
 
-
 import (
-	"fmt"
 	"crypto/tls"
+	"fmt"
 
 	"murgo/config"
-	"murgo/pkg/sessionpool"
 )
 
-
-
-
-func NewTlsServer(supervisor *MurgoSupervisor) (*TlsServer) {
+func NewTlsServer(supervisor *MurgoSupervisor) *TlsServer {
 	tlsServer := new(TlsServer)
 	tlsServer.supervisor = supervisor
 
@@ -50,10 +45,9 @@ func startTlsServer() {
 			//continue
 		}
 		tlsServer.supervisor.sessionManager.Cast <- &MurgoMessage{
-			Kind:handleIncomingClient,
-			Conn:&conn,
+			Kind: handleIncomingClient,
+			Conn: &conn,
 		}
 
 	}
 }
-

@@ -2,36 +2,31 @@
 // @version 1.0
 // murgo channel manager
 
-package channelmanager
+package server
 
 import (
 	"errors"
 	"fmt"
-	"reflect"
-
-	"murgo/pkg/mumbleproto"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/go-redis/redis"
 
+	"reflect"
+
+	"murgo/pkg/moduleserver"
+	"murgo/pkg/mumbleproto"
 )
 
-/*type ChannelManager struct {
-
-	supervisor *MurgoSupervisor
-
+type ChannelManager struct {
 	channelList   map[int]*Channel
 	nextChannelID int
-
-	Cast chan interface{}
+	Cast          chan interface{}
 	//Call chan interface{}
-
 	rootChannel *Channel
-}*/
+}
 
 const ROOT_CHANNEL = 0
 
-func NewChannelManager(supervisor *MurgoSupervisor) *ChannelManager {
+func (CM *ChannelManager) init() {
 
 	//assign heap
 	channelManager := new(ChannelManager)
@@ -40,7 +35,6 @@ func NewChannelManager(supervisor *MurgoSupervisor) *ChannelManager {
 	//channelManager.Call = make(chan interface{})
 
 	// set uservisor
-	channelManager.supervisor = supervisor
 
 	// set root channel as default channel for all user
 	rootChannel := NewChannel(ROOT_CHANNEL, "RootChannel")
@@ -49,8 +43,6 @@ func NewChannelManager(supervisor *MurgoSupervisor) *ChannelManager {
 
 	//Add one for each channel ID
 	channelManager.nextChannelID = ROOT_CHANNEL + 1
-
-	return channelManager
 }
 
 const ( // TODO : keep other module from accessing those, enum or name space,,,,
@@ -64,8 +56,8 @@ const ( // TODO : keep other module from accessing those, enum or name space,,,,
 func (channelManager *ChannelManager) StartChannelManager() {
 
 	// todo : running 추가 또는 젠서버로 통일
-	defer func(){
-		if err:= recover(); err!= nil{
+	defer func() {
+		if err := recover(); err != nil {
 			fmt.Println("Channel manager recovered")
 			channelManager.StartChannelManager()
 		}
@@ -93,7 +85,6 @@ func (channelManager *ChannelManager) handleCast1 (){
 }*/
 func (channelManager *ChannelManager) handleCast(castData interface{}) {
 	murgoMsg := castData.(*MurgoMessage)
-
 
 	switch murgoMsg.Kind {
 	default:
@@ -124,9 +115,10 @@ func (channelManager *ChannelManager) addChannel(channelName string, client *Tls
 	channelManager.nextChannelID++
 	channelManager.channelList[channel.Id] = channel
 
-
 	//let all session know the created channel
 	channelStateMsg := channel.ToChannelState()
+	moduleserver.Cast(sessionmanager, "broadcastMessage", channelStateMsg)
+
 	channelManager.supervisor.sessionManager.Cast <- &MurgoMessage{
 		Kind: broadcastMessage,
 		Msg:  channelStateMsg,
@@ -211,20 +203,18 @@ func (channelManager *ChannelManager) userEnterChannel(channelId int, client *Tl
 	newChannel.addClient(client)
 	userState := client.ToUserState()
 
-
 	if oldChannel != nil && oldChannel.Id != ROOT_CHANNEL {
 		//이전 채널에 떠났음을 알림
 		channelManager.broadCastChannelWithoutMe(oldChannel.Id, userState, client)
 	}
 	// 변한 상태를 클라이언트에게 알림
 
-
 	if newChannel.Id != ROOT_CHANNEL {
 		//새 채널입장을 채널 유저들에게 알림
 		channelManager.broadCastChannelWithoutMe(newChannel.Id, userState, client)
 		//채널에 있는 유저들을 입장하는 유저에게 알림
 		newChannel.sendUserListInChannel(client)
-	/*	for _, users := range newChannel.clients {
+		/*	for _, users := range newChannel.clients {
 			client.sendMessage(users.ToUserState())
 
 		}*/
@@ -235,7 +225,7 @@ func (channelManager *ChannelManager) userEnterChannel(channelId int, client *Tl
 	}
 
 	//for test
-	for _, eachChannel := range channelManager.channelList{
+	for _, eachChannel := range channelManager.channelList {
 		fmt.Print(eachChannel.Name, ": ")
 		for _, eachUser := range eachChannel.clients {
 			fmt.Print(eachUser.UserName, ", ")
@@ -326,37 +316,3 @@ func (genServer *GenServer) handleCall(msg *CallMessage){
 	} // todo : call return 작업중
 }
 */
-
-
-func ExampleClient() {
-	client := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
-		Password: "", // no password set
-		DB:       0,  // use default DB
-	})
-
-	pong, err := client.Ping().Result()
-	fmt.Println(pong, err)
-	// Output: PONG <nil>
-	err = client.Set("key", "value", 0).Err()
-	if err != nil {
-		panic(err)
-	}
-
-	val, err := client.Get("key").Result()
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("key", val)
-
-	val2, err := client.Get("key2").Result()
-	if err == redis.Nil {
-		fmt.Println("key2 does not exists")
-	} else if err != nil {
-		panic(err)
-	} else {
-		fmt.Println("key2", val2)
-	}
-	// Output: key value
-	// key2 does not exists
-}

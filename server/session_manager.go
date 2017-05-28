@@ -1,28 +1,29 @@
-package sessionmanager
+package server
 
 import (
 	"fmt"
 	"net"
 
 	"murgo/config"
+	"murgo/pkg/moduleserver"
 	"murgo/pkg/mumbleproto"
 	"murgo/pkg/sessionpool"
-	"murgo/pkg/servermodule"
 
 	"github.com/golang/protobuf/proto"
-	"murgo/server"
 )
 
 const SM = "sessionManager"
 const (
 	broadcastMessage uint16 = iota
 	handleIncomingClient
-
-
 )
-type SessionManager struct {
 
-	clientList map[uint32] *server.TlsClient
+type sm interface {
+	broadcastMessage(msg interface{})
+}
+
+type SessionManager struct {
+	clientList  map[uint32]*TlsClient
 	sessionPool *sessionpool.SessionPool
 
 	//Cast chan interface{}
@@ -30,16 +31,16 @@ type SessionManager struct {
 
 }
 
-func StartLink()(*SessionManager){
+func StartLink() *SessionManager {
 	sessionManager := new(SessionManager)
 
-	servermodule.StartLinkGenserver(sessionManager)
+	moduleserver.StartLinkGenserver(sessionManager)
 	return sessionManager
 	//sessionmanager는 genserver를 실행하고 callback으로 sessionManager.init을 실행함
 }
-func newSessionManager() *SessionManager{
+func newSessionManager() *SessionManager {
 	sessionManager := new(SessionManager)
-	sessionManager.clientList = make(map[uint32] *server.TlsClient)
+	sessionManager.clientList = make(map[uint32]*TlsClient)
 	sessionManager.sessionPool = sessionpool.New()
 	return sessionManager
 }
@@ -52,13 +53,10 @@ func newSessionManager() *SessionManager{
 
 }*/
 
-
-func (sessionManager *SessionManager) handleCast(){
-	servermodule.Cast(SM, &servermodule.CastMessage{})
+func (sessionManager *SessionManager) handleCast() {
+	moduleserver.Cast(SM, &moduleserver.CastMessage{})
 
 }
-
-
 
 //todo : genserver pkg적용 되면 지울 것,
 /*
@@ -97,12 +95,12 @@ func (sessionManager *SessionManager)handleCast(castData interface{}) {
 
 */
 
-func (sessionManager *SessionManager)handleIncomingClient(conn *net.Conn){
+func (sessionManager *SessionManager) handleIncomingClient(conn *net.Conn) {
 
 	//init tls client
 	session := sessionManager.sessionPool.Get()
 	//client := NewTlsClient(conn, session, sessionManager.supervisor)
-	client := server.NewTlsClient(conn, session)
+	client := NewTlsClient(conn, session)
 	sessionManager.clientList[session] = client
 	// send version information
 	version := &mumbleproto.Version{
@@ -121,11 +119,9 @@ func (sessionManager *SessionManager)handleIncomingClient(conn *net.Conn){
 	//sessionManager.supervisor.startGenServer(client.recvLoop)
 	//servermodule.Supervisor.StartGenServer()
 
-
 }
 
-
-func (sessionManager *SessionManager) broadcastMessage(msg interface{}){
+func (sessionManager *SessionManager) broadcastMessage(msg interface{}) {
 	for _, eachClient := range sessionManager.clientList {
 		/*if client.state < StateClientAuthenticated {
 			continue
@@ -133,15 +129,15 @@ func (sessionManager *SessionManager) broadcastMessage(msg interface{}){
 		eachClient.SendMessage(msg)
 	}
 }
+
 // todo : cast time.Time type to number type or overloading
 /*
 func elapsed(prev time.Time, now time.Time)(time.Time){
 	return now - prev
 }*/
 
-
 //callbacks
-func (sessionManager *SessionManager)init(){
+func (sessionManager *SessionManager) init() {
 	sessionManager.sessionPool = sessionpool.New()
-	sessionManager.clientList = make(map[uint32] *server.TlsClient)
+	sessionManager.clientList = make(map[uint32]*TlsClient)
 }
