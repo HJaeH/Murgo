@@ -12,8 +12,8 @@ import (
 
 	"reflect"
 
-	"murgo/pkg/moduleserver"
 	"murgo/pkg/mumbleproto"
+	"murgo/pkg/servermodule"
 )
 
 type ChannelManager struct {
@@ -22,11 +22,12 @@ type ChannelManager struct {
 	Cast          chan interface{}
 	//Call chan interface{}
 	rootChannel *Channel
+	servermodule.GenCallback
 }
 
 const ROOT_CHANNEL = 0
 
-func (CM *ChannelManager) init() {
+func (CM *ChannelManager) Init() {
 
 	//assign heap
 	channelManager := new(ChannelManager)
@@ -43,47 +44,19 @@ func (CM *ChannelManager) init() {
 
 	//Add one for each channel ID
 	channelManager.nextChannelID = ROOT_CHANNEL + 1
+
 }
 
-const ( // TODO : keep other module from accessing those, enum or name space,,,,
-	addChannel uint16 = iota
-	broadCastChannel
-	sendChannelList
-	userEnterChannel
+const (
+	sendchannellist  = "SendChannelList"
+	userenterchannel = "UserEnterChannel"
+	broadcastmessage = "broadcastmessage"
+	broadcastchannel = "BroadCastChannel"
 )
 
-// channel receiving loop
-func (channelManager *ChannelManager) StartChannelManager() {
-
-	// todo : running 추가 또는 젠서버로 통일
-	defer func() {
-		if err := recover(); err != nil {
-			fmt.Println("Channel manager recovered")
-			channelManager.StartChannelManager()
-		}
-	}()
-
-	for {
-		select {
-		case castData := <-channelManager.Cast:
-			channelManager.handleCast(castData)
-		}
-	}
-	//channelManager.GenServer.Cast(channelManager.GenServer.)
-}
-
 /*
-type messenger interface {
-	startMessageHandler()
-	handleCast1()
-
-}
-
-
-func (channelManager *ChannelManager) handleCast1 (){
-	messenger.handleCast1(3)
-}*/
 func (channelManager *ChannelManager) handleCast(castData interface{}) {
+
 	murgoMsg := castData.(*MurgoMessage)
 
 	switch murgoMsg.Kind {
@@ -101,11 +74,15 @@ func (channelManager *ChannelManager) handleCast(castData interface{}) {
 
 	}
 }
+*/
 
-func (channelManager *ChannelManager) addChannel(channelName string, client *TlsClient) {
+const addchannel = "AddChannel"
+
+func (channelManager *ChannelManager) AddChannel(channelName string, session uint32) {
 	for _, eachChannel := range channelManager.channelList {
 		if eachChannel.Name == channelName {
-			sendPermissionDenied(client, mumbleproto.PermissionDenied_ChannelName)
+			//todo : client object 없에는 과정
+			//sendPermissionDenied(client, mumbleproto.PermissionDenied_ChannelName)
 			fmt.Println("duplicated channel name")
 			return
 		}
@@ -117,15 +94,10 @@ func (channelManager *ChannelManager) addChannel(channelName string, client *Tls
 
 	//let all session know the created channel
 	channelStateMsg := channel.ToChannelState()
-	moduleserver.Cast(sessionmanager, "broadcastMessage", channelStateMsg)
 
-	channelManager.supervisor.sessionManager.Cast <- &MurgoMessage{
-		Kind: broadcastMessage,
-		Msg:  channelStateMsg,
-	}
-
+	servermodule.Cast(sessionmanager, broadcastmessage, channelStateMsg)
 	//let the channel creator enter the channel
-	channelManager.userEnterChannel(channel.Id, client)
+	channelManager.userEnterChannel(channel.Id, session)
 
 }
 
@@ -138,7 +110,8 @@ func (channelManager *ChannelManager) exitChannel(client *TlsClient, channel *Ch
 }
 
 //broadcast a msg to all users in a channel
-func (channelManager *ChannelManager) broadCastChannel(channelId int, msg interface{}) {
+
+func (channelManager *ChannelManager) BroadCastChannel(channelId int, msg interface{}) {
 	channel, err := channelManager.channel(channelId)
 	if err != nil {
 		fmt.Println(err)
@@ -148,7 +121,8 @@ func (channelManager *ChannelManager) broadCastChannel(channelId int, msg interf
 	}
 }
 
-func (channelManager *ChannelManager) broadCastChannelWithoutMe(channelId int, msg interface{}, client *TlsClient) {
+func (channelManager *ChannelManager) broadCastChannelWithoutMe(channelId int, msg interface{}, tempClient interface{}) {
+	client := tempClient.(TlsClient)
 	channel, err := channelManager.channel(channelId)
 	if err != nil {
 		fmt.Println(err)
@@ -178,7 +152,9 @@ func (channelManager *ChannelManager) sendChannelList(client *TlsClient) {
 	}
 }
 
-func (channelManager *ChannelManager) userEnterChannel(channelId int, client *TlsClient) {
+func (channelManager *ChannelManager) userEnterChannel(channelId int, tempClient interface{}) {
+
+	client := tempClient.(*TlsClient)
 
 	newChannel, err := channelManager.channel(channelId)
 	fmt.Println(client.UserName, " will enter ", newChannel.Name)
@@ -234,8 +210,8 @@ func (channelManager *ChannelManager) userEnterChannel(channelId int, client *Tl
 	}
 }
 
-func (channelManager *ChannelManager) removeChannel(channel *Channel) {
-
+func (channelManager *ChannelManager) removeChannel(tempChannel interface{}) {
+	channel := tempChannel.(*Channel)
 	// Can't remove root
 	if channel.Id == ROOT_CHANNEL {
 		return
@@ -250,11 +226,7 @@ func (channelManager *ChannelManager) removeChannel(channel *Channel) {
 		channelManager.userEnterChannel(ROOT_CHANNEL, client)
 
 		//channelManager.Call(channelManager.supervisor.sessionManager)
-
-		channelManager.supervisor.sessionManager.Cast <- &MurgoMessage{
-			Kind: broadcastMessage,
-			Msg:  userStateMsg,
-		}
+		servermodule.Cast(sessionmanager, broadcastmessage, userStateMsg)
 	}
 
 	// Remove the channel itself
@@ -268,10 +240,7 @@ func (channelManager *ChannelManager) removeChannel(channel *Channel) {
 	channelRemoveMsg := &mumbleproto.ChannelRemove{
 		ChannelId: proto.Uint32(uint32(channel.Id)),
 	}
-	channelManager.supervisor.sessionManager.Cast <- &MurgoMessage{
-		Kind: broadcastMessage,
-		Msg:  channelRemoveMsg,
-	}
+	servermodule.Cast(sessionmanager, broadcastmessage, channelRemoveMsg)
 }
 
 func (channelManager *ChannelManager) printChannels() {

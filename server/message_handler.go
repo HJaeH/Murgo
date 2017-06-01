@@ -6,22 +6,17 @@ package server
 
 import (
 	"fmt"
-
 	"murgo/pkg/mumbleproto"
+	"murgo/pkg/servermodule"
 
 	"github.com/golang/protobuf/proto"
-	//"murgo/server/schema"
 )
 
-type MessageHandler struct {
-	supervisor *MurgoSupervisor
+const handlemessage = "handleMessage"
 
-	Cast chan interface{}
-	Call chan interface{}
-}
-type messageHandling interface {
-}
+type MessageHandler struct{}
 
+/*
 func NewMessageHandler(supervisor *MurgoSupervisor) *MessageHandler {
 
 	messageHandler := new(MessageHandler)
@@ -31,25 +26,7 @@ func NewMessageHandler(supervisor *MurgoSupervisor) *MessageHandler {
 	return messageHandler
 }
 
-func (messageHandler *MessageHandler) startMassageHandler() {
-	// panic 리턴
-	/*defer func(){
-		if err:= recover(); err!= nil{
-			fmt.Println("Message Handler recovered")
-			messageHandler.startMassageHandler()
-		}
-	}()
-	*/
-	fmt.Println("Message Handler stared")
-	for {
-		select {
-		case castData := <-messageHandler.Cast:
-			messageHandler.handleCast(castData)
-
-		}
-	}
-}
-
+*/
 func (messageHandler *MessageHandler) handleCast(castData interface{}) {
 	switch castData.(type) {
 	default:
@@ -70,8 +47,8 @@ func (messageHandler *MessageHandler) handleMassage(msg *Message) {
 		messageHandler.handleChannelRemoveMessage(msg)
 	case mumbleproto.MessageChannelState:
 		messageHandler.handleChannelStateMessage(msg)
-	case mumbleproto.MessageUserState:
-		messageHandler.handleUserStateMessage(msg)
+	/*case mumbleproto.MessageUserState:
+	messageHandler.handleUserStateMessage(msg)*/
 	case mumbleproto.MessageUserRemove:
 		messageHandler.handleUserRemoveMessage(msg)
 	case mumbleproto.MessageBanList:
@@ -140,18 +117,9 @@ func (messageHandler *MessageHandler) handleAuthenticateMessage(msg *Message) {
 		return
 	}
 	/// send channel state
-	messageHandler.supervisor.channelManager.Cast <- &MurgoMessage{
-		FuncName: "sendChannelList",
-		Kind:     sendChannelList,
-		Client:   client,
-	}
+	servermodule.Cast(channelmanager, sendchannellist, client)
 	// enter the root channel as default channel
-	messageHandler.supervisor.channelManager.Cast <- &MurgoMessage{
-		FuncName:  "userEnterChannel",
-		Kind:      userEnterChannel,
-		Client:    client,
-		ChannelId: ROOT_CHANNEL,
-	}
+	servermodule.Cast(channelmanager, userenterchannel, client, ROOT_CHANNEL)
 
 	sync := &mumbleproto.ServerSync{}
 	sync.Session = proto.Uint32(uint32(client.session))
@@ -192,7 +160,7 @@ func (messageHandler *MessageHandler) handlePingMessage(msg *Message) {
 	})
 }
 
-func (messageHandler *MessageHandler) handleUserStateMessage(msg *Message) {
+/*func (messageHandler *MessageHandler) handleUserStateMessage(msg *Message) {
 
 	// 메시지를 보낸 유저 reset idle -> 이 부분은 통합
 	userstate := &mumbleproto.UserState{}
@@ -204,11 +172,7 @@ func (messageHandler *MessageHandler) handleUserStateMessage(msg *Message) {
 	fmt.Println("userstate info:", userstate, "msg id :", msg.testCounter, "from:", msg.client.UserName)
 	//Channel ID 필드 값이 있는 경우
 	if userstate.ChannelId != nil {
-		messageHandler.supervisor.channelManager.Cast <- &MurgoMessage{
-			Kind:      userEnterChannel,
-			ChannelId: int(*userstate.ChannelId),
-			Client:    msg.client, // temp target
-		}
+		servermodule.Cast(channelmanager, userenterchannel, int(*userstate.ChannelId), msg.client)
 	}
 
 	clients := messageHandler.supervisor.tlsClients
@@ -260,18 +224,19 @@ func (messageHandler *MessageHandler) handleUserStateMessage(msg *Message) {
 	}
 
 	if userstate.ChannelId != nil {
+		servermodule.Cast()
 		channelManager.Cast <- &MurgoMessage{
-			Kind:      broadCastChannel,
+			Kind:      broadcastchannel,
 			ChannelId: int(*userstate.ChannelId),
 			Msg:       newMsg,
 		}
 	}
 
-}
+}*/
 
 //구현된 핸들링 함수
-func (messageHandler *MessageHandler) handleChannelStateMessage(msg *Message) {
-
+func (messageHandler *MessageHandler) handleChannelStateMessage(tempMsg interface{}) {
+	msg := tempMsg.(Message)
 	channelStateMsg := &mumbleproto.ChannelState{}
 	err := proto.Unmarshal(msg.buf, channelStateMsg)
 	if err != nil {
@@ -280,11 +245,7 @@ func (messageHandler *MessageHandler) handleChannelStateMessage(msg *Message) {
 	}
 	fmt.Println("ChannelState info:", channelStateMsg, "from:", msg.client.UserName)
 	if channelStateMsg.ChannelId == nil && channelStateMsg.Name != nil && *channelStateMsg.Temporary == true && *channelStateMsg.Parent == 0 && *channelStateMsg.Position == 0 {
-		messageHandler.supervisor.channelManager.Cast <- &MurgoMessage{
-			Kind:        addChannel,
-			ChannelName: *channelStateMsg.Name,
-			Client:      msg.client,
-		}
+		servermodule.Cast(channelmanager, addchannel, *channelStateMsg.Name, msg.client.session)
 	}
 }
 func (messageHandler *MessageHandler) handleUserStatsMessage(msg *Message) {
@@ -348,11 +309,9 @@ func (messageHandler *MessageHandler) handleTextMessage(msg *Message) {
 			ChannelId: textMsg.ChannelId,
 			Message:   textMsg.Message,
 		}
-		messageHandler.supervisor.channelManager.Cast <- &MurgoMessage{
-			Kind:      broadCastChannel,
-			Msg:       newMsg,
-			ChannelId: int(textMsg.ChannelId[0]),
-		}
+
+		servermodule.Cast(channelmanager, broadcastchannel, newMsg, int(textMsg.ChannelId[0]))
+
 	} else if textMsg.Session != nil {
 
 	}

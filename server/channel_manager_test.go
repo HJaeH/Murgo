@@ -2,7 +2,7 @@ package server
 
 import (
 	"fmt"
-	"murgo/pkg/moduleserver"
+	"murgo/pkg/servermodule"
 )
 
 type CMTest1 struct {
@@ -13,19 +13,19 @@ func (cmTest *CMTest1) startLink() {
 }
 
 func (cmTest *CMTest1) init() {
-	msg := &moduleserver.CastMessage{}
-	moduleserver.genServer.Cast("CM2", msg)
+	msg := &servermodule.CastMessage{}
+	servermodule.genServer.Cast("CM2", msg)
 }
 
 func (cmTest *CMTest1) terminate() {
 	fmt.Print("startlink")
 }
 
-func (cmTest *CMTest1) handleCall(msg *moduleserver.CallMessage) {
+func (cmTest *CMTest1) handleCall(msg *servermodule.CallMessage) {
 	fmt.Println(msg, "ddd")
 }
 
-func (cmTest *CMTest1) handleCast(msg *moduleserver.CastMessage) {
+func (cmTest *CMTest1) handleCast(msg *servermodule.CastMessage) {
 	fmt.Println(msg, "ddd")
 }
 
@@ -37,8 +37,8 @@ func (cmTest *CMTest2) startLink() {
 }
 
 func (cmTest *CMTest2) init() {
-	msg := &moduleserver.CastMessage{}
-	moduleserver.genServer.Cast("CM1", msg)
+	msg := &servermodule.CastMessage{}
+	servermodule.genServer.Cast("CM1", msg)
 }
 
 func (cmTest *CMTest2) terminate() {
@@ -49,6 +49,6 @@ func (cmTest *CMTest2) handleCall() {
 	fmt.Print("startlink")
 }
 
-func (cmTest *CMTest2) handleCast(msg *moduleserver.CastMessage) {
+func (cmTest *CMTest2) handleCast(msg *servermodule.CastMessage) {
 	fmt.Println(msg, "ddd")
 }

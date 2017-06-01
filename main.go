@@ -5,7 +5,6 @@
 //
 //
 
-
 package main
 
 import (
@@ -17,11 +16,7 @@ import (
 
 func main() {
 
-	murgoSupervisor := new(server.MurgoSupervisor)
-
 	//start supervisor
-	murgoSupervisor.Start()
-
 	server.StartSupervisor()
 
 	c := make(chan os.Signal, 2)
@@ -29,7 +24,7 @@ func main() {
 
 	<-c // main routine wait for C^ interrupt signal
 
-	err := murgoSupervisor.Terminate()
+	err := server.Terminate()
 	if err != nil {
 		//todo : 비정상 종료
 	}

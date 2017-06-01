@@ -5,27 +5,22 @@ import (
 	"net"
 
 	"murgo/config"
-	"murgo/pkg/moduleserver"
 	"murgo/pkg/mumbleproto"
+	"murgo/pkg/servermodule"
 	"murgo/pkg/sessionpool"
 
 	"github.com/golang/protobuf/proto"
 )
 
-const SM = "sessionManager"
 const (
-	broadcastMessage uint16 = iota
-	handleIncomingClient
+	handleincomingclient = "handleIncomingClient"
 )
 
-type sm interface {
-	broadcastMessage(msg interface{})
-}
-
 type SessionManager struct {
-	clientList  map[uint32]*TlsClient
-	sessionPool *sessionpool.SessionPool
-
+	clientList   map[uint32]*TlsClient
+	sessionPool  *sessionpool.SessionPool
+	clientIdList map[uint32]*TlsClient
+	servermodule.GenCallback
 	//Cast chan interface{}
 	//Call chan interface{}
 
@@ -33,8 +28,7 @@ type SessionManager struct {
 
 func StartLink() *SessionManager {
 	sessionManager := new(SessionManager)
-
-	moduleserver.StartLinkGenserver(sessionManager)
+	//servermodule.StartLinkGenserver(sessionManager)
 	return sessionManager
 	//sessionmanager는 genserver를 실행하고 callback으로 sessionManager.init을 실행함
 }
@@ -53,9 +47,13 @@ func newSessionManager() *SessionManager {
 
 }*/
 
-func (sessionManager *SessionManager) handleCast() {
+/*func (sessionManager *SessionManager) handleCast() {
 	moduleserver.Cast(SM, &moduleserver.CastMessage{})
 
+}*/
+
+func (SM *SessionManager) getClientList() map[uint32]*TlsClient {
+	return SM.clientList
 }
 
 //todo : genserver pkg적용 되면 지울 것,
@@ -95,6 +93,7 @@ func (sessionManager *SessionManager)handleCast(castData interface{}) {
 
 */
 
+//const handleIncomingClient = GetFunctionName((*SessionManager).handleIncomingClient)
 func (sessionManager *SessionManager) handleIncomingClient(conn *net.Conn) {
 
 	//init tls client
@@ -121,7 +120,7 @@ func (sessionManager *SessionManager) handleIncomingClient(conn *net.Conn) {
 
 }
 
-func (sessionManager *SessionManager) broadcastMessage(msg interface{}) {
+func (sessionManager *SessionManager) BroadcastMessage(msg interface{}) {
 	for _, eachClient := range sessionManager.clientList {
 		/*if client.state < StateClientAuthenticated {
 			continue
@@ -137,7 +136,11 @@ func elapsed(prev time.Time, now time.Time)(time.Time){
 }*/
 
 //callbacks
-func (sessionManager *SessionManager) init() {
+func (sessionManager *SessionManager) Init() {
 	sessionManager.sessionPool = sessionpool.New()
 	sessionManager.clientList = make(map[uint32]*TlsClient)
+}
+
+func (SM *SessionManager) handleCast() {
+
 }

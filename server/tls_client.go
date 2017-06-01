@@ -15,7 +15,7 @@ import (
 	"murgo/config"
 	"murgo/pkg/mumbleproto"
 
-	"murgo/pkg/moduleserver"
+	"murgo/pkg/servermodule"
 
 	"github.com/golang/protobuf/proto"
 )
@@ -94,10 +94,7 @@ func (tlsClient *TlsClient) receive() {
 			}
 		}
 
-		//tlsClient.GenServer.Cast("messageHandler", msg)
-		_ = msg
-		//tlsClient.Cast("a", msg)
-		moduleserver.Cast()
+		servermodule.Cast(messagehandler, handlemessage, msg)
 	}
 
 }
