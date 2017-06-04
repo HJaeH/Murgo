@@ -1,8 +1,9 @@
-package redis
+package util
 
 import (
-	"github.com/go-redis/redis"
 	"fmt"
+
+	"github.com/go-redis/redis"
 )
 
 func ExampleClient() {

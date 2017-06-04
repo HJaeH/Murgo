@@ -10,12 +10,9 @@ import (
 
 	"murgo/config"
 	"murgo/pkg/servermodule"
+	APIkeys "murgo/server/util"
 	"net"
 	"reflect"
-)
-
-const (
-	accept = tlsserver + iota
 )
 
 type TlsServer struct {
@@ -24,8 +21,6 @@ type TlsServer struct {
 	//todo : need to be deleted
 }
 
-//const accept = servermodule.RegisterAPI(TlsServer.Accept)
-
 func (tlsServer *TlsServer) Accept() {
 	fmt.Println("server is listening")
 	conn, err := tlsServer.ln.Accept()
@@ -33,16 +28,14 @@ func (tlsServer *TlsServer) Accept() {
 		fmt.Println(" Accepting a conneciton failed handling a client")
 		//continue
 	}
-	servermodule.Cast((*SessionManager).handleIncomingClient, &conn)
-	servermodule.Cast((*TlsServer).Accept)
+	servermodule.Cast(sessionmanager, handleincomingclient, &conn)
+	servermodule.Cast(tlsserver, APIkeys.Accept)
 
 }
 
 func (tlsServer *TlsServer) Init() {
 
 	servermodule.RegisterAPI((*TlsServer).Accept)
-
-	//
 	cer, err := tls.LoadX509KeyPair("./src/murgo/config/server.crt", "./src/murgo/config/server.key")
 	if err != nil {
 		fmt.Println(err)
@@ -59,7 +52,7 @@ func (tlsServer *TlsServer) Init() {
 	//todo : accept routine into framework
 	// todo : make accept as a cast req
 
-	servermodule.Cast(tlsserver, accept)
+	servermodule.Cast(tlsserver, APIkeys.Accept)
 
 }
 

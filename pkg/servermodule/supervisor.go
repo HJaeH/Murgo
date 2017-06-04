@@ -23,13 +23,12 @@ type Sup struct {
 	castChan chan *CastMessage
 	callChan chan *CallMessage
 
-	children map[mid]GenCallback
-	apiMap   map[api]string
+	children map[mid]GenServer
 }
 
 func (s *Sup) init() {
 	s.isRunning = false
-	s.children = make(map[mid]GenCallback)
+	s.children = make(map[mid]GenServer)
 	s.castChan = make(chan *CastMessage)
 	s.callChan = make(chan *CallMessage)
 }
@@ -47,12 +46,16 @@ var GlobalParent = make(map[mid]*Sup)
 
 //add child to supervisor
 func (s *Sup) addChild(m mid, module GenCallback) {
+
 	s.children[m] = module
 }
 
 // get child module by name
-func (s *Sup) child(mid mid) GenCallback {
-	return s.children[mid]
+func (s *Sup) child(mid mid) GenServer {
+	if mod, ok := s.children[mid]; ok {
+		return mod
+	}
+	panic("Mid doesn't exist")
 }
 
 func (s *Sup) run() {
@@ -61,19 +64,19 @@ func (s *Sup) run() {
 
 }
 
-func (this *Sup) supervisorLoop() {
-	this.isRunning = true
+func (s *Sup) supervisorLoop() {
+	s.isRunning = true
 	// todo : single goroutine genserver랑 아닌거 구분 해서 구현
 	for {
 		//todo : goroutine pool 구현
 		//req(cast, call)단위로 goroutine작업 수행 함으로서 비동기 동작 구현
 		select {
-		case msg := <-this.callChan:
+		case msg := <-s.callChan:
 			//todo : call return 구현, 동기 코드 구현
 			//go supervisor.child(msg.moduleName).handleCast(msg)
-			go this.handleCall(msg)
-		case msg := <-this.castChan:
-			go this.handleCast(msg)
+			go s.handleCall(msg)
+		case msg := <-s.castChan:
+			go s.handleCast(msg)
 		}
 	}
 }
@@ -81,20 +84,14 @@ func (this *Sup) supervisorLoop() {
 func (s *Sup) handleCast(msg *CastMessage) {
 
 	module := s.children[msg.modId]
-
-	request := s.apiMap[msg.apiName]
-	module.HandleCall(request, msg.args)
+	s.handleCast(msg)
 }
 
 func (s *Sup) handleCall(msg *CallMessage) {
-
 	module := s.children[msg.modId]
-
-	request := s.apiMap[msg.apiName]
-	module.HandleCall(request, msg.args)
+	module.router[msg.apiName].Call(msg.args)
 	/*returnChan <- &CallReply{
 		//sender: ,
-
 	}*/ // todo : call return 작업중
 }
 
@@ -105,7 +102,7 @@ func restart(module func()) {
 	}
 }
 
-func toArgumentList(args ...interface{}) []interface{} {
+func toSlice(args ...interface{}) []interface{} {
 	if args != nil {
 		newArgs := make([]interface{}, len(args))
 		for i, arg := range args {
@@ -133,14 +130,16 @@ func rawReqParser(rawAPI interface{}) (mid, api) {
 	return modId.(mid), apiName.(api)
 }
 
-func cast(rawReq interface{}, args ...interface{}) {
-	mid, request := rawReqParser(rawReq)
+func cast(modKey mid, key apiKey, args ...interface{}) {
+
+	//mid, request := rawReqParser(rawReq)
+
 	msg := &CastMessage{
-		modId:   mid,
-		apiName: request,
-		args:    toArgumentList(args),
+		modId:   modKey,
+		apiName: key,
+		args:    toSlice(args),
 	}
-	GlobalParent[mid].castChan <- msg
+	GlobalParent[modKey].castChan <- msg
 }
 
 func call(rawReq interface{}, args ...interface{}) {
@@ -148,7 +147,7 @@ func call(rawReq interface{}, args ...interface{}) {
 	msg := &CallMessage{
 		modId:   mid,
 		apiName: request,
-		args:    toArgumentList(args),
+		args:    toSlice(args),
 	}
 	GlobalParent[mid].castChan <- msg
 }
@@ -160,7 +159,6 @@ func call(rawReq interface{}, args ...interface{}) {
 }*/
 
 //// externals
-
 func StartSupervisor(smod SupCallback) {
 	mid := getMid(smod)
 
@@ -179,6 +177,7 @@ func Call(module mid, api api, args ...interface{}) {
 	return
 }
 
-func Cast(rawReq interface{}, args ...interface{}) {
-	cast(rawReq, args)
+func Cast(moduleKey mid, key apiKey, args ...interface{}) {
+
+	cast(moduleKey, key, args)
 }

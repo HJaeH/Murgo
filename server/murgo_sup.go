@@ -14,9 +14,7 @@ import (
 
 const (
 	//supervisors
-	murgosupervisor = (iota + 1) * 100
-
-	//genservers
+	murgosupervisor = (iota + 1) * 1000
 	sessionmanager
 	channelmanager
 	messagehandler
@@ -40,7 +38,7 @@ func (supervisor *MurgoSupervisor) Terminate() error {
 }
 
 func Terminate() error {
-	err := errors.New("d")
+	err := errors.New("terminate")
 	return err
 }
 
