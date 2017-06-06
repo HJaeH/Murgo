@@ -1,9 +1,6 @@
 package util
 
-import (
-	"net"
-)
-
+/*
 type Supervisor interface {
 	Init()
 }
@@ -25,23 +22,23 @@ type SessionManager interface {
 
 type MessageHandler interface {
 	handleMassage(interface{})
-	/*handleAuthenticateMessage(*server.Message)
-	handlePingMessage(*server.Message)
-	handleChannelRemoveMessage(*server.Message)
-	handleChannelStateMessage(*server.Message)
-	handleUserStateMessage(*server.Message)
-	handleUserRemoveMessage(*server.Message)
-	handleBanListMessage(*server.Message)
-	handleTextMessage(*server.Message)
-	handleAclMessage(*server.Message)
-	handleQueryUsers(*server.Message)
-	handleCryptSetup(*server.Message)
-	handleUserList(*server.Message)
-	handleVoiceTarget(*server.Message)
-	handlePermissionQuery(*server.Message)
-	handleUserStatsMessage(*server.Message)
-	handleRequestBlob(*server.Message)*/
+*/ /*handleAuthenticateMessage(*server.Message)
+handlePingMessage(*server.Message)
+handleChannelRemoveMessage(*server.Message)
+handleChannelStateMessage(*server.Message)
+handleUserStateMessage(*server.Message)
+handleUserRemoveMessage(*server.Message)
+handleBanListMessage(*server.Message)
+handleTextMessage(*server.Message)
+handleAclMessage(*server.Message)
+handleQueryUsers(*server.Message)
+handleCryptSetup(*server.Message)
+handleUserList(*server.Message)
+handleVoiceTarget(*server.Message)
+handlePermissionQuery(*server.Message)
+handleUserStatsMessage(*server.Message)
+handleRequestBlob(*server.Message)*/ /*
 }
 type TlsServer interface {
 	Accept()
-}
+}*/

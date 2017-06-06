@@ -1,7 +1,3 @@
-// @author 허재화 <jhwaheo@smilegate.com>
-// @version 1.0
-// server tls accept server
-
 package server
 
 import (
@@ -12,7 +8,6 @@ import (
 	"murgo/pkg/servermodule"
 	APIkeys "murgo/server/util"
 	"net"
-	"reflect"
 )
 
 type TlsServer struct {
@@ -24,18 +19,23 @@ type TlsServer struct {
 func (tlsServer *TlsServer) Accept() {
 	fmt.Println("server is listening")
 	conn, err := tlsServer.ln.Accept()
+	_ = conn
 	if err != nil {
 		fmt.Println(" Accepting a conneciton failed handling a client")
 		//continue
 	}
-	servermodule.Cast(sessionmanager, handleincomingclient, &conn)
-	servermodule.Cast(tlsserver, APIkeys.Accept)
+	//servermodule.Cast1(new(SessionManager), APIkeys.HandleIncomingClient /*&conn*/)
+	//servermodule.Cast1(new(SessionManager), APIkeys.HandleIncomingClient /* , &conn */, 11)
+	//servermodule.Cast(APIkeys.HandleIncomingClient, 11)
+	servermodule.Cast1(APIkeys.HandleIncomingClient, 11)
+
+	servermodule.Cast1(APIkeys.Accept)
 
 }
 
 func (tlsServer *TlsServer) Init() {
 
-	servermodule.RegisterAPI((*TlsServer).Accept)
+	servermodule.RegisterAPI((*TlsServer).Accept, APIkeys.Accept)
 	cer, err := tls.LoadX509KeyPair("./src/murgo/config/server.crt", "./src/murgo/config/server.key")
 	if err != nil {
 		fmt.Println(err)
@@ -45,17 +45,17 @@ func (tlsServer *TlsServer) Init() {
 	tlsConfig := &tls.Config{Certificates: []tls.Certificate{cer}}
 	tlsServer.ln, err = tls.Listen(config.CONN_TYPE, config.DEFAULT_PORT, tlsConfig)
 	if err != nil {
-
 		fmt.Println(err)
 		return
 	}
 	//todo : accept routine into framework
 	// todo : make accept as a cast req
 
-	servermodule.Cast(tlsserver, APIkeys.Accept)
+	servermodule.Cast1(APIkeys.Accept)
 
 }
 
+/*
 func (ts *TlsServer) HandleCast(request string, args ...interface{}) {
 
 	if args == nil {
@@ -79,7 +79,7 @@ func (ts *TlsServer) HandleCall(request string, args ...interface{}) {
 		}
 		reflect.ValueOf(ts).MethodByName(request).Call(inputs)
 	}
-}
+}*/
 
 func (ts *TlsServer) terminate() {
 	ts.ln.Close()

@@ -1,7 +1,3 @@
-// @author 허재화 <jhwaheo@smilegate.com>
-// @version 1.0
-// murgo channel manager
-
 package server
 
 import (
@@ -10,10 +6,10 @@ import (
 
 	"github.com/golang/protobuf/proto"
 
-	"reflect"
-
 	"murgo/pkg/mumbleproto"
 	"murgo/pkg/servermodule"
+	APIkeys "murgo/server/util"
+	"reflect"
 )
 
 type ChannelManager struct {
@@ -47,16 +43,7 @@ func (CM *ChannelManager) Init() {
 
 }
 
-const (
-	sendchannellist  = "SendChannelList"
-	userenterchannel = "UserEnterChannel"
-	broadcastmessage = "broadcastmessage"
-	broadcastchannel = "BroadCastChannel"
-)
-
 /*
-func (channelManager *ChannelManager) handleCast(castData interface{}) {
-
 	murgoMsg := castData.(*MurgoMessage)
 
 	switch murgoMsg.Kind {
@@ -76,8 +63,6 @@ func (channelManager *ChannelManager) handleCast(castData interface{}) {
 }
 */
 
-const addchannel = "AddChannel"
-
 func (channelManager *ChannelManager) AddChannel(channelName string, session uint32) {
 	for _, eachChannel := range channelManager.channelList {
 		if eachChannel.Name == channelName {
@@ -95,7 +80,7 @@ func (channelManager *ChannelManager) AddChannel(channelName string, session uin
 	//let all session know the created channel
 	channelStateMsg := channel.ToChannelState()
 
-	servermodule.Cast(sessionmanager, broadcastmessage, channelStateMsg)
+	servermodule.Cast(APIkeys.BroadcastMessage, channelStateMsg)
 	//let the channel creator enter the channel
 	channelManager.userEnterChannel(channel.Id, session)
 
@@ -196,7 +181,6 @@ func (channelManager *ChannelManager) userEnterChannel(channelId int, tempClient
 		}*/
 		//client.SendMessage(userState)
 	} else {
-		fmt.Println("-------------------")
 		client.SendMessage(userState)
 	}
 
@@ -226,7 +210,7 @@ func (channelManager *ChannelManager) removeChannel(tempChannel interface{}) {
 		channelManager.userEnterChannel(ROOT_CHANNEL, client)
 
 		//channelManager.Call(channelManager.supervisor.sessionManager)
-		servermodule.Cast(sessionmanager, broadcastmessage, userStateMsg)
+		servermodule.Cast(APIkeys.BroadcastMessage, userStateMsg)
 	}
 
 	// Remove the channel itself
@@ -240,7 +224,7 @@ func (channelManager *ChannelManager) removeChannel(tempChannel interface{}) {
 	channelRemoveMsg := &mumbleproto.ChannelRemove{
 		ChannelId: proto.Uint32(uint32(channel.Id)),
 	}
-	servermodule.Cast(sessionmanager, broadcastmessage, channelRemoveMsg)
+	servermodule.Cast(APIkeys.BroadcastMessage, channelRemoveMsg)
 }
 
 func (channelManager *ChannelManager) printChannels() {

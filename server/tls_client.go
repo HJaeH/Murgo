@@ -1,7 +1,3 @@
-// @author 허재화 <jhwaheo@smilegate.com>
-// @version 1.0
-// murgo tls client module
-
 package server
 
 import (
@@ -16,6 +12,8 @@ import (
 	"murgo/pkg/mumbleproto"
 
 	"murgo/pkg/servermodule"
+
+	"murgo/server/util"
 
 	"github.com/golang/protobuf/proto"
 )
@@ -94,7 +92,7 @@ func (tlsClient *TlsClient) receive() {
 			}
 		}
 
-		servermodule.Cast(messagehandler, handlemessage, msg)
+		servermodule.Cast(util.HandleMessage, msg)
 	}
 
 }

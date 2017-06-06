@@ -1,10 +1,3 @@
-// @author 허재화 <jhwaheo@smilegate.com>
-// @version 1.0
-// murgo server main
-//
-//
-//
-
 package main
 
 import (
@@ -17,7 +10,7 @@ import (
 func main() {
 
 	//start supervisor
-	server.StartSupervisor()
+	server.Start()
 
 	c := make(chan os.Signal, 2)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)

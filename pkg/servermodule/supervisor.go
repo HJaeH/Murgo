@@ -1,7 +1,3 @@
-// @author 허재화 <jhwaheo@smilegate.com>
-// @version 1.0
-// murgo server supervisor
-
 package servermodule
 
 import (
@@ -23,20 +19,17 @@ type Sup struct {
 	castChan chan *CastMessage
 	callChan chan *CallMessage
 
-	children map[mid]GenServer
+	children map[string]*GenServer
 }
 
 func (s *Sup) init() {
 	s.isRunning = false
-	s.children = make(map[mid]GenServer)
+	s.children = make(map[string]*GenServer)
 	s.castChan = make(chan *CastMessage)
 	s.callChan = make(chan *CallMessage)
 }
 
-//todo : thread safety check
-//todo : supervisor 전체를 관리하는 모듈 추후 필요 현재는 string -> *Sup의 global map 사용
-//Root supervisor의 parent는 자신으로 설정
-var GlobalParent = make(map[mid]*Sup)
+//var GlobalParent = make(map[mid]*Sup)
 
 //todo : 마저 구현
 /*func StartLinkSupervisor() {
@@ -45,13 +38,13 @@ var GlobalParent = make(map[mid]*Sup)
 }*/
 
 //add child to supervisor
-func (s *Sup) addChild(m mid, module GenCallback) {
+func (s *Sup) addChild(mid string, genServer *GenServer) {
 
-	s.children[m] = module
+	s.children[mid] = genServer
 }
 
 // get child module by name
-func (s *Sup) child(mid mid) GenServer {
+func (s *Sup) child(mid string) *GenServer {
 	if mod, ok := s.children[mid]; ok {
 		return mod
 	}
@@ -65,15 +58,18 @@ func (s *Sup) run() {
 }
 
 func (s *Sup) supervisorLoop() {
+	fmt.Println("supervisor is running")
 	s.isRunning = true
 	// todo : single goroutine genserver랑 아닌거 구분 해서 구현
 	for {
 		//todo : goroutine pool 구현
 		//req(cast, call)단위로 goroutine작업 수행 함으로서 비동기 동작 구현
 		select {
+
 		case msg := <-s.callChan:
 			//todo : call return 구현, 동기 코드 구현
 			//go supervisor.child(msg.moduleName).handleCast(msg)
+
 			go s.handleCall(msg)
 		case msg := <-s.castChan:
 			go s.handleCast(msg)
@@ -82,14 +78,45 @@ func (s *Sup) supervisorLoop() {
 }
 
 func (s *Sup) handleCast(msg *CastMessage) {
+	if msg.args == nil {
+		msg.apiVal.Call([]reflect.Value{})
+	} else {
+		doHandleCast(msg.apiVal, msg.args...)
+	}
 
-	module := s.children[msg.modId]
-	s.handleCast(msg)
+	defer func() {
+		<-msg.syncChan
+	}()
+
+}
+
+func doHandleCast(val reflect.Value, args ...interface{}) {
+	if args == nil {
+		val.Call([]reflect.Value{})
+	} else {
+		inputs := make([]reflect.Value, len(args))
+		for i, _ := range args {
+			inputs[i] = reflect.ValueOf(args[i])
+		}
+		val.Call(inputs)
+	}
 }
 
 func (s *Sup) handleCall(msg *CallMessage) {
-	module := s.children[msg.modId]
-	module.router[msg.apiName].Call(msg.args)
+	if msg.args == nil {
+		msg.apiVal.Call([]reflect.Value{})
+	} else {
+		inputs := make([]reflect.Value, len(msg.args))
+		for i, _ := range msg.args {
+			inputs[i] = reflect.ValueOf(msg.args[i])
+
+		}
+		msg.apiVal.Call(inputs)
+	}
+	defer func() {
+		<-msg.syncChan
+	}()
+
 	/*returnChan <- &CallReply{
 		//sender: ,
 	}*/ // todo : call return 작업중
@@ -118,38 +145,16 @@ func toSlice(args ...interface{}) []interface{} {
 	return nil
 }
 
-func rawReqParser(rawAPI interface{}) (mid, api) {
-	var modId, apiName interface{}
+func rawReqParser(rawAPI interface{}) (string, string) {
+
 	//returns string ex)main.(*B).A
 	rawStr := runtime.FuncForPC(reflect.ValueOf(rawAPI).Pointer()).Name()
 	reqs := strings.Split(rawStr, ".")
-	modId = strings.Trim(reqs[len(reqs)-2], "(*)")
+	modName := strings.Trim(reqs[len(reqs)-2], "(*)")
 
-	apiName = reqs[len(reqs)-1]
+	apiName := reqs[len(reqs)-1]
 
-	return modId.(mid), apiName.(api)
-}
-
-func cast(modKey mid, key apiKey, args ...interface{}) {
-
-	//mid, request := rawReqParser(rawReq)
-
-	msg := &CastMessage{
-		modId:   modKey,
-		apiName: key,
-		args:    toSlice(args),
-	}
-	GlobalParent[modKey].castChan <- msg
-}
-
-func call(rawReq interface{}, args ...interface{}) {
-	mid, request := rawReqParser(rawReq)
-	msg := &CallMessage{
-		modId:   mid,
-		apiName: request,
-		args:    toSlice(args),
-	}
-	GlobalParent[mid].castChan <- msg
+	return modName, apiName
 }
 
 // todo : 추후 구현 필요
@@ -160,24 +165,19 @@ func call(rawReq interface{}, args ...interface{}) {
 
 //// externals
 func StartSupervisor(smod SupCallback) {
-	mid := getMid(smod)
+
+	smid := getMid(smod)
 
 	supervisor := new(Sup)
 	supervisor.init()
 
-	GlobalParent[mid] = supervisor
+	//run router
+	newRouter(smid, supervisor)
 
+	router.supervisors[smid] = supervisor
+	//run supervisor
 	go supervisor.run()
+
+	//app's Init callback
 	smod.Init()
-}
-
-func Call(module mid, api api, args ...interface{}) {
-	call(module, api, args)
-	// todo : return
-	return
-}
-
-func Cast(moduleKey mid, key apiKey, args ...interface{}) {
-
-	cast(moduleKey, key, args)
 }

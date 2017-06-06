@@ -1,10 +1,9 @@
 package util
 
-import (
-	"fmt"
+//"github.com/go-redis/redis"
+//"fmt"
 
-	"github.com/go-redis/redis"
-)
+/*
 
 func ExampleClient() {
 	client := redis.NewClient(&redis.Options{
@@ -38,3 +37,4 @@ func ExampleClient() {
 	// Output: key value
 	// key2 does not exists
 }
+*/

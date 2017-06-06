@@ -1,24 +1,10 @@
-// @author 허재화 <jhwaheo@smilegate.com>
-// @version 1.0
-// murgo server supervisor
-
 package server
 
 import (
 	"errors"
+	"fmt"
 	"murgo/pkg/servermodule"
-)
-
-//todo 이런식으로 선언 및 관리 구상
-//const a = servermodule.ModuleRegister()
-
-const (
-	//supervisors
-	murgosupervisor = (iota + 1) * 1000
-	sessionmanager
-	channelmanager
-	messagehandler
-	tlsserver
+	"reflect"
 )
 
 type MurgoSupervisor struct {
@@ -28,8 +14,9 @@ func (murgoSupervisor *MurgoSupervisor) startTlsClient(chan int) {
 
 }
 
-func StartSupervisor() {
-	servermodule.StartSupervisor(new(MurgoSupervisor))
+func Start() {
+	servermodule.StartSupervisor(new(MurgoSupervisor)) // root
+
 }
 
 func (supervisor *MurgoSupervisor) Terminate() error {
@@ -42,12 +29,24 @@ func Terminate() error {
 	return err
 }
 
+func (m *MurgoSupervisor) Temp(a int) {
+	fmt.Println(a)
+}
+
 //callbacks
 func (ms *MurgoSupervisor) Init() {
+
 	servermodule.StartLinkGenServer(ms, new(SessionManager))
 	servermodule.StartLinkGenServer(ms, new(ChannelManager))
 	servermodule.StartLinkGenServer(ms, new(TlsServer))
+	servermodule.StartLinkGenServer(ms, new(MessageHandler))
 
+	inputs := make([]reflect.Value, 1)
+	temp := reflect.ValueOf(1123999)
+	inputs[0] = temp
+	reflect.ValueOf(new(MurgoSupervisor)).MethodByName("Temp").Call(inputs)
+
+	fmt.Println("murgo sup init finished")
 }
 
 //todo : startchild 구현, tlsclient -> supervisor로 구현

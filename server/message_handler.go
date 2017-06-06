@@ -1,43 +1,27 @@
-// @author 허재화 <jhwaheo@smilegate.com>
-// @version 1.0
-// murgo message handler
-
 package server
 
 import (
 	"fmt"
 	"murgo/pkg/mumbleproto"
 	"murgo/pkg/servermodule"
+	APIkeys "murgo/server/util"
 
 	"github.com/golang/protobuf/proto"
 )
 
-const handlemessage = "handleMessage"
-
 type MessageHandler struct{}
 
-/*
-func NewMessageHandler(supervisor *MurgoSupervisor) *MessageHandler {
-
-	messageHandler := new(MessageHandler)
-	messageHandler.supervisor = supervisor
-
-	messageHandler.Cast = make(chan interface{})
-	return messageHandler
-}
-
-*/
 func (messageHandler *MessageHandler) handleCast(castData interface{}) {
 	switch castData.(type) {
 	default:
 		panic("Handling cast of unexpected type in message handler")
 	case *Message:
 		msg := castData.(*Message)
-		messageHandler.handleMassage(msg)
+		messageHandler.HandleMassage(msg)
 	}
 }
 
-func (messageHandler *MessageHandler) handleMassage(msg *Message) {
+func (messageHandler *MessageHandler) HandleMassage(msg *Message) {
 	switch msg.kind {
 	case mumbleproto.MessageAuthenticate:
 		messageHandler.handleAuthenticateMessage(msg)
@@ -117,9 +101,9 @@ func (messageHandler *MessageHandler) handleAuthenticateMessage(msg *Message) {
 		return
 	}
 	/// send channel state
-	servermodule.Cast(channelmanager, sendchannellist, client)
+	servermodule.Cast(APIkeys.SendChannellist, client)
 	// enter the root channel as default channel
-	servermodule.Cast(channelmanager, userenterchannel, client, ROOT_CHANNEL)
+	servermodule.Cast(APIkeys.UserEnterChannel, client, ROOT_CHANNEL)
 
 	sync := &mumbleproto.ServerSync{}
 	sync.Session = proto.Uint32(uint32(client.session))
@@ -245,7 +229,7 @@ func (messageHandler *MessageHandler) handleChannelStateMessage(tempMsg interfac
 	}
 	fmt.Println("ChannelState info:", channelStateMsg, "from:", msg.client.UserName)
 	if channelStateMsg.ChannelId == nil && channelStateMsg.Name != nil && *channelStateMsg.Temporary == true && *channelStateMsg.Parent == 0 && *channelStateMsg.Position == 0 {
-		servermodule.Cast(channelmanager, addchannel, *channelStateMsg.Name, msg.client.session)
+		servermodule.Cast(APIkeys.AddChannel, *channelStateMsg.Name, msg.client.session)
 	}
 }
 func (messageHandler *MessageHandler) handleUserStatsMessage(msg *Message) {
@@ -310,7 +294,7 @@ func (messageHandler *MessageHandler) handleTextMessage(msg *Message) {
 			Message:   textMsg.Message,
 		}
 
-		servermodule.Cast(channelmanager, broadcastchannel, newMsg, int(textMsg.ChannelId[0]))
+		servermodule.Cast(APIkeys.BroadcastChannel, newMsg, int(textMsg.ChannelId[0]))
 
 	} else if textMsg.Session != nil {
 
@@ -430,4 +414,8 @@ func sendPermissionDenied(client *TlsClient, denyType mumbleproto.PermissionDeni
 		return
 	}
 
+}
+
+func (m *MessageHandler) Init() {
+	servermodule.RegisterAPI((*MessageHandler).HandleMassage, APIkeys.HandleMessage)
 }
