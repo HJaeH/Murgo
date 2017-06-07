@@ -2,6 +2,11 @@ package servermodule
 
 import (
 	"reflect"
+	"sync"
+)
+
+const (
+	routeBufferPerModule = 10
 )
 
 //todo : req type 변경시에 타입 지정해서 사용
@@ -20,6 +25,8 @@ type GenServer struct {
 
 	apis map[int]*API
 	sync chan bool
+
+	wg *sync.WaitGroup
 }
 
 type API struct {
@@ -29,17 +36,6 @@ type API struct {
 	key    int
 }
 
-/*
-type CastMessage struct {
-	//modId  string
-	apiKey int
-
-	args []interface{}
-
-	//by supervisor to call api
-	//syncChan chan bool
-	apiVal reflect.Value
-}*/
 type CastMessage struct {
 	apiVal reflect.Value
 	args   []interface{}
@@ -47,6 +43,7 @@ type CastMessage struct {
 
 	//by supervisor to call api
 	syncChan chan bool
+	wg       *sync.WaitGroup
 }
 
 type CallMessage struct {
@@ -65,7 +62,7 @@ type CallReply struct {
 	result int
 }
 
-func StartLinkGenServer(smod SupCallback, mod GenCallback) {
+func StartLinkGenServer(smod SupCallback, mod GenCallback, singleThreaed bool) {
 	//genserver에 module을 등록.
 	// get module name string
 
@@ -75,7 +72,7 @@ func StartLinkGenServer(smod SupCallback, mod GenCallback) {
 	//set supervisor of new module
 	if sup, ok := router.supervisors[smid]; ok {
 		router.supervisors[mid] = sup
-		gen := newGenServer(smod, mod)
+		gen := newGenServer(smod, mod, singleThreaed)
 		sup.addChild(mid, gen)
 	} else {
 		panic("Invalid supName")
@@ -84,9 +81,9 @@ func StartLinkGenServer(smod SupCallback, mod GenCallback) {
 
 }
 
-func newGenServer(smod SupCallback, mod GenCallback) *GenServer {
+func newGenServer(smod SupCallback, mod GenCallback, sg bool) *GenServer {
 	gen := new(GenServer)
-	gen.init(smod, mod)
+	gen.init(smod, mod, sg)
 	return gen
 }
 
@@ -139,13 +136,18 @@ func getMid(mod interface{}) string {
 	return reflect.TypeOf(mod).Elem().Name()
 }
 
-func (g *GenServer) init(smod SupCallback, mod GenCallback) {
+func (g *GenServer) init(smod SupCallback, mod GenCallback, sg bool) {
 	//todo mid 추가 여부
 	//mid := getMid(mod)
 	smid := getMid(smod)
 	parent := router.supervisors[smid]
-
-	g.sync = make(chan bool, 1)
+	g.wg = new(sync.WaitGroup)
+	g.sync = make(chan bool, routeBufferPerModule)
+	/*if sg {
+		g.sync = make(chan bool, routeBufferPerModule)
+	} else {
+		g.sync = make(chan bool, routeBufferPerModule)
+	}*/
 	g.apis = make(map[int]*API)
 
 	g.sup = parent

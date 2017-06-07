@@ -29,9 +29,7 @@ func (s *Sup) init() {
 	s.callChan = make(chan *CallMessage)
 }
 
-//var GlobalParent = make(map[mid]*Sup)
-
-//todo : 마저 구현
+//todo :
 /*func StartLinkSupervisor() {
 	supervisor := new(Supervisor)
 	supervisor.run()
@@ -52,26 +50,32 @@ func (s *Sup) child(mid string) *GenServer {
 }
 
 func (s *Sup) run() {
+
 	defer restart(s.supervisorLoop)
 	s.supervisorLoop()
 
 }
 
 func (s *Sup) supervisorLoop() {
-	fmt.Println("supervisor is running")
+	if s.isRunning {
+		panic("supervisor is already runnning")
+	}
 	s.isRunning = true
-	// todo : single goroutine genserver랑 아닌거 구분 해서 구현
 	for {
-		//todo : goroutine pool 구현
-		//req(cast, call)단위로 goroutine작업 수행 함으로서 비동기 동작 구현
+		//todo : goroutine pool로 goroutine 필요할듯
 		select {
 
 		case msg := <-s.callChan:
 			//todo : call return 구현, 동기 코드 구현
-			//go supervisor.child(msg.moduleName).handleCast(msg)
-
 			go s.handleCall(msg)
 		case msg := <-s.castChan:
+			/*if msg.wg != nil {
+				msg.wg.Add(1)
+				msg.wg.Wait()
+			}
+			msg.wg.Add(1)
+			msg.wg.*/
+
 			go s.handleCast(msg)
 		}
 	}
@@ -86,6 +90,7 @@ func (s *Sup) handleCast(msg *CastMessage) {
 
 	defer func() {
 		<-msg.syncChan
+		//msg.wg.Done()
 	}()
 
 }
@@ -98,6 +103,7 @@ func doHandleCast(val reflect.Value, args ...interface{}) {
 		for i, _ := range args {
 			inputs[i] = reflect.ValueOf(args[i])
 		}
+
 		val.Call(inputs)
 	}
 }
@@ -157,7 +163,7 @@ func rawReqParser(rawAPI interface{}) (string, string) {
 	return modName, apiName
 }
 
-// todo : 추후 구현 필요
+// todo : terminate구현
 /*func TerminateChild(supervisor interface{}, pid chan int) {
 	Call(supervisor, pid)
 	//call(Supervisor, {terminate_child, Name}).

@@ -3,7 +3,7 @@ package server
 type Message struct {
 	buf         []byte
 	kind        uint16
-	client      *TlsClient
+	client      *Client
 	testCounter int
 }
 

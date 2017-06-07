@@ -12,6 +12,7 @@ const (
 const (
 	//101 ~
 	HandleIncomingClient = SessionManager + iota + 1
+	BroadcastMessage
 )
 
 const (
@@ -21,13 +22,13 @@ const (
 
 const (
 	//301 ~
-	SendChannellist = ChannelManager + iota + 1
-	UserEnterChannel
-	BroadcastMessage
+	SendChannelList = ChannelManager + iota + 1
+	EnterChannel
 	BroadcastChannel
 	AddChannel
 )
 
 const ( // 401 ~
 	Accept = TlsServer + (iota + 1)
+	Receive
 )

@@ -11,14 +11,10 @@ import (
 	"murgo/config"
 	"murgo/pkg/mumbleproto"
 
-	"murgo/pkg/servermodule"
-
-	"murgo/server/util"
-
 	"github.com/golang/protobuf/proto"
 )
 
-type TlsClient struct {
+type Client struct {
 	// 유저가 접속중인 channel
 	Channel *Channel
 	conn    *net.Conn
@@ -59,9 +55,9 @@ type TlsClient struct {
 
 // called at session manager
 //func NewTlsClient(conn *net.Conn, session uint32, supervisor *MurgoSupervisor) (*TlsClient){
-func NewTlsClient(conn *net.Conn, session uint32) *TlsClient {
+func NewTlsClient(conn *net.Conn, session uint32) *Client {
 	//create new object
-	tlsClient := new(TlsClient)
+	tlsClient := new(Client)
 	tlsClient.cryptState = new(config.CryptState)
 
 	//tlsClient.MurgoSupervisor = supervisor
@@ -77,28 +73,8 @@ func NewTlsClient(conn *net.Conn, session uint32) *TlsClient {
 	return tlsClient
 }
 
-func (tlsClient *TlsClient) receive() {
-
-	for {
-		msg, err := tlsClient.readProtoMessage()
-		if err != nil {
-			if err != nil {
-				if err == io.EOF {
-					tlsClient.Disconnect()
-				} else {
-					//client.Panicf("%v", err)
-				}
-				return
-			}
-		}
-
-		servermodule.Cast(util.HandleMessage, msg)
-	}
-
-}
-
 //send msg to client
-func (tlsClient *TlsClient) SendMessage(msg interface{}) error {
+func (c *Client) SendMessage(msg interface{}) error {
 
 	buf := new(bytes.Buffer)
 	var (
@@ -134,7 +110,7 @@ func (tlsClient *TlsClient) SendMessage(msg interface{}) error {
 		return err
 	}
 
-	_, err = (*tlsClient.conn).Write(buf.Bytes())
+	_, err = (*c.conn).Write(buf.Bytes())
 	if err != nil {
 		return err
 	}
@@ -143,7 +119,7 @@ func (tlsClient *TlsClient) SendMessage(msg interface{}) error {
 }
 
 //
-func (tlsClient *TlsClient) readProtoMessage() (msg *Message, err error) {
+func (c *Client) readProtoMessage() (msg *Message, err error) {
 	var (
 		length uint32
 		kind   uint16
@@ -151,52 +127,52 @@ func (tlsClient *TlsClient) readProtoMessage() (msg *Message, err error) {
 
 	// Read the message type (16-bit big-endian unsigned integer)
 	//read data form io.reader
-	err = binary.Read(tlsClient.reader, binary.BigEndian, &kind)
+	err = binary.Read(c.reader, binary.BigEndian, &kind)
 	if err != nil {
 		return
 	}
 
 	// Read the message length (32-bit big-endian unsigned integer)
-	err = binary.Read(tlsClient.reader, binary.BigEndian, &length)
+	err = binary.Read(c.reader, binary.BigEndian, &length)
 	if err != nil {
 		return
 	}
 
 	buf := make([]byte, length)
-	_, err = io.ReadFull(tlsClient.reader, buf)
+	_, err = io.ReadFull(c.reader, buf)
 	if err != nil {
 		return
 	}
-	tlsClient.testCounter++
+	c.testCounter++
 
 	msg = &Message{
 		buf:         buf,
 		kind:        kind,
-		client:      tlsClient,
-		testCounter: tlsClient.testCounter,
+		client:      c,
+		testCounter: c.testCounter,
 	}
 	return msg, err
 }
 
-func (tlsClient *TlsClient) Disconnect() {
+func (c *Client) Disconnect() {
 
 }
-func (tlsClient *TlsClient) ToUserState() *mumbleproto.UserState {
+func (c *Client) ToUserState() *mumbleproto.UserState {
 
 	userStateMsg := &mumbleproto.UserState{
-		Session:   proto.Uint32(tlsClient.session),
-		Name:      proto.String(tlsClient.UserName),
-		UserId:    proto.Uint32(uint32(tlsClient.userId)),
-		ChannelId: proto.Uint32(uint32(tlsClient.Channel.Id)),
-		Mute:      proto.Bool(tlsClient.mute),
-		Deaf:      proto.Bool(tlsClient.deaf),
-		Suppress:  proto.Bool(tlsClient.suppress),
-		SelfDeaf:  proto.Bool(tlsClient.selfDeaf),
-		SelfMute:  proto.Bool(tlsClient.selfMute),
+		Session:   proto.Uint32(c.session),
+		Name:      proto.String(c.UserName),
+		UserId:    proto.Uint32(uint32(c.userId)),
+		ChannelId: proto.Uint32(uint32(c.Channel.Id)),
+		Mute:      proto.Bool(c.mute),
+		Deaf:      proto.Bool(c.deaf),
+		Suppress:  proto.Bool(c.suppress),
+		SelfDeaf:  proto.Bool(c.selfDeaf),
+		SelfMute:  proto.Bool(c.selfMute),
 	}
 	return userStateMsg
 }
 
-func (tlsClient *TlsClient) Session() uint32 {
-	return tlsClient.session
+func (c *Client) Session() uint32 {
+	return c.session
 }

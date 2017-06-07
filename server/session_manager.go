@@ -15,33 +15,34 @@ import (
 )
 
 type SessionManager struct {
-	clientList   map[uint32]*TlsClient
+	clientList   map[uint32]*Client
 	sessionPool  *sessionpool.SessionPool
-	clientIdList map[uint32]*TlsClient
-	servermodule.GenCallback
+	clientIdList map[uint32]*Client
 }
 
-func (s *SessionManager) getClientList() map[uint32]*TlsClient {
+func (s *SessionManager) getClientList() map[uint32]*Client {
 	return s.clientList
 }
 
 //Callbacks
 func (s *SessionManager) Init() {
 	servermodule.RegisterAPI((*SessionManager).HandleIncomingClient, APIkeys.HandleIncomingClient)
+	servermodule.RegisterAPI((*SessionManager).BroadcastMessage, APIkeys.BroadcastMessage)
 	s.sessionPool = sessionpool.New()
-	s.clientList = make(map[uint32]*TlsClient)
+	s.clientList = make(map[uint32]*Client)
 }
 
 //// APIs
-func (s *SessionManager) HandleIncomingClient( /*conn *net.Conn*/ a int) {
+func (s *SessionManager) HandleIncomingClient(conn net.Conn) {
+	//conn = (*net.Conn)conn
 	//var conn = new(nest.Conn)
 	//init tls client
-	fmt.Println("jhandle cincpmig msdfjsdklasdjfk;", a)
-	conn := new(net.Conn)
-	/*//session := s.sessionPool.Get()*/
-	session := *new(uint32)
+
+	session := s.sessionPool.Get()
 	//client := NewTlsClient(conn, session, sessionManager.supervisor)
-	client := NewTlsClient(conn, session)
+	/*a :=
+	a = conn.*/
+	client := NewTlsClient(&conn, session)
 	s.clientList[session] = client
 	// send version information
 	version := &mumbleproto.Version{
@@ -53,11 +54,11 @@ func (s *SessionManager) HandleIncomingClient( /*conn *net.Conn*/ a int) {
 	if err != nil {
 		fmt.Println("Error sending message to client")
 	}
-
 	//create client message receive loop as gen server
 	// TODO : the start time need to be pushed back - after check duplication
 	// TODO : but the work is conducted in authenticate which is running in message accepting loop
 	//sessionManager.supervisor.startGenServer(client.recvLoop)
+	servermodule.Cast(APIkeys.Receive, client)
 	//servermodule.Supervisor.StartGenServer()
 
 }

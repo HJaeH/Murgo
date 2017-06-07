@@ -12,58 +12,39 @@ import (
 	"reflect"
 )
 
-type ChannelManager struct {
-	channelList   map[int]*Channel
-	nextChannelID int
-	Cast          chan interface{}
-	//Call chan interface{}
-	rootChannel *Channel
-	servermodule.GenCallback
-}
-
 const ROOT_CHANNEL = 0
 
-func (CM *ChannelManager) Init() {
+type ChannelManager struct {
 
+	//todo add numChannel and keep channel ids
+	channelList   map[int]*Channel
+	nextChannelID int
+	rootChannel   *Channel
+}
+
+func (c *ChannelManager) Init() {
+	servermodule.RegisterAPI((*ChannelManager).SendChannelList, APIkeys.SendChannelList)
+	servermodule.RegisterAPI((*ChannelManager).EnterChannel, APIkeys.EnterChannel)
+	servermodule.RegisterAPI((*ChannelManager).BroadCastChannel, APIkeys.BroadcastChannel)
+	servermodule.RegisterAPI((*ChannelManager).AddChannel, APIkeys.AddChannel)
 	//assign heap
-	channelManager := new(ChannelManager)
-	channelManager.channelList = make(map[int]*Channel)
-	channelManager.Cast = make(chan interface{})
-	//channelManager.Call = make(chan interface{})
 
-	// set uservisor
+	c.init()
+
+}
+func (c *ChannelManager) init() {
+	c.channelList = make(map[int]*Channel)
 
 	// set root channel as default channel for all user
 	rootChannel := NewChannel(ROOT_CHANNEL, "RootChannel")
-	channelManager.rootChannel = rootChannel
-	channelManager.channelList[ROOT_CHANNEL] = rootChannel
+	c.rootChannel = rootChannel
+	c.channelList[ROOT_CHANNEL] = rootChannel
 
 	//Add one for each channel ID
-	channelManager.nextChannelID = ROOT_CHANNEL + 1
-
+	c.nextChannelID = ROOT_CHANNEL + 1
 }
 
-/*
-	murgoMsg := castData.(*MurgoMessage)
-
-	switch murgoMsg.Kind {
-	default:
-		panic("Handling cast of unexpected type in channel manager")
-	case addChannel:
-		fmt.Println(murgoMsg.FuncName)
-		channelManager.addChannel(murgoMsg.ChannelName, murgoMsg.Client)
-	case userEnterChannel:
-		channelManager.userEnterChannel(murgoMsg.ChannelId, murgoMsg.Client)
-	case broadCastChannel:
-		channelManager.broadCastChannel(murgoMsg.ChannelId, murgoMsg.Msg)
-	case sendChannelList:
-		channelManager.sendChannelList(murgoMsg.Client)
-
-	}
-}
-*/
-
-func (channelManager *ChannelManager) AddChannel(channelName string, session uint32) {
+func (channelManager *ChannelManager) AddChannel(channelName string, client *Client) {
 	for _, eachChannel := range channelManager.channelList {
 		if eachChannel.Name == channelName {
 			//todo : client object 없에는 과정
@@ -78,11 +59,11 @@ func (channelManager *ChannelManager) AddChannel(channelName string, session uin
 	channelManager.channelList[channel.Id] = channel
 
 	//let all session know the created channel
-	channelStateMsg := channel.ToChannelState()
+	channelStateMsg := channel.toChannelState()
 
 	servermodule.Cast(APIkeys.BroadcastMessage, channelStateMsg)
 	//let the channel creator enter the channel
-	channelManager.userEnterChannel(channel.Id, session)
+	channelManager.EnterChannel(channel.Id, client)
 
 }
 
@@ -90,7 +71,7 @@ func (channelManager *ChannelManager) RootChannel() *Channel {
 	return channelManager.channelList[ROOT_CHANNEL]
 }
 
-func (channelManager *ChannelManager) exitChannel(client *TlsClient, channel *Channel) {
+func (channelManager *ChannelManager) exitChannel(client *Client, channel *Channel) {
 
 }
 
@@ -106,8 +87,7 @@ func (channelManager *ChannelManager) BroadCastChannel(channelId int, msg interf
 	}
 }
 
-func (channelManager *ChannelManager) broadCastChannelWithoutMe(channelId int, msg interface{}, tempClient interface{}) {
-	client := tempClient.(TlsClient)
+func (channelManager *ChannelManager) broadCastChannelWithoutMe(channelId int, msg interface{}, client *Client) {
 	channel, err := channelManager.channel(channelId)
 	if err != nil {
 		fmt.Println(err)
@@ -129,20 +109,18 @@ func (channelManager *ChannelManager) channel(channelId int) (*Channel, error) {
 	return nil, errors.New("Channel ID in invalid in channel list")
 }
 
-func (channelManager *ChannelManager) sendChannelList(client *TlsClient) {
+func (channelManager *ChannelManager) SendChannelList(client *Client) {
 	fmt.Println(len(channelManager.channelList))
 	for _, eachChannel := range channelManager.channelList {
 
-		client.SendMessage(eachChannel.ToChannelState())
+		client.SendMessage(eachChannel.toChannelState())
 	}
 }
 
-func (channelManager *ChannelManager) userEnterChannel(channelId int, tempClient interface{}) {
-
-	client := tempClient.(*TlsClient)
+func (channelManager *ChannelManager) EnterChannel(channelId int, client *Client) {
 
 	newChannel, err := channelManager.channel(channelId)
-	fmt.Println(client.UserName, " will enter ", newChannel.Name)
+	//fmt.Println(client.UserName, " will enter ", newChannel.Name)
 	if err != nil {
 		panic("Channel Id doesn't exist")
 	}
@@ -174,7 +152,7 @@ func (channelManager *ChannelManager) userEnterChannel(channelId int, tempClient
 		//새 채널입장을 채널 유저들에게 알림
 		channelManager.broadCastChannelWithoutMe(newChannel.Id, userState, client)
 		//채널에 있는 유저들을 입장하는 유저에게 알림
-		newChannel.sendUserListInChannel(client)
+		newChannel.SendUserListInChannel(client)
 		/*	for _, users := range newChannel.clients {
 			client.sendMessage(users.ToUserState())
 
@@ -207,7 +185,7 @@ func (channelManager *ChannelManager) removeChannel(tempChannel interface{}) {
 		userStateMsg := &mumbleproto.UserState{}
 		userStateMsg.Session = proto.Uint32(client.Session())
 		userStateMsg.ChannelId = proto.Uint32(uint32(ROOT_CHANNEL))
-		channelManager.userEnterChannel(ROOT_CHANNEL, client)
+		channelManager.EnterChannel(ROOT_CHANNEL, client)
 
 		//channelManager.Call(channelManager.supervisor.sessionManager)
 		servermodule.Cast(APIkeys.BroadcastMessage, userStateMsg)
@@ -234,38 +212,3 @@ func (channelManager *ChannelManager) printChannels() {
 	}
 	fmt.Println()
 }
-
-/*
-
-func (genServer *GenServer) handleCast(castData interface{}){
-	temp := castData.(CastMessage)
-	funcName := temp.funcName
-	args := temp.args
-
-	inputs := make([]reflect.Value, len(args))
-
-	for i, _ := range args {
-		inputs[i] = reflect.ValueOf(args[i])
-
-	}
-	reflect.ValueOf(genServer).MethodByName(funcName).Call(inputs)
-}
-
-func (genServer *GenServer) handleCall(msg *CallMessage){
-	funcName := msg.funcName
-	args := msg.args
-	returnChan := msg.returnChan
-
-	inputs := make([]reflect.Value, len(args))
-
-	for i, _ := range args {
-		inputs[i] = reflect.ValueOf(args[i])
-
-	}
-	reflect.ValueOf(genServer).MethodByName(funcName).Call(inputs)
-	returnChan <- &CallReply{
-		//sender: ,
-
-	} // todo : call return 작업중
-}
-*/

@@ -1,9 +1,10 @@
 package server
 
 import (
-	"crypto/tls"
 	"fmt"
 
+	"crypto/tls"
+	"io"
 	"murgo/config"
 	"murgo/pkg/servermodule"
 	APIkeys "murgo/server/util"
@@ -17,24 +18,17 @@ type TlsServer struct {
 }
 
 func (tlsServer *TlsServer) Accept() {
-	fmt.Println("server is listening")
 	conn, err := tlsServer.ln.Accept()
-	_ = conn
 	if err != nil {
 		fmt.Println(" Accepting a conneciton failed handling a client")
-		//continue
 	}
-	//servermodule.Cast1(new(SessionManager), APIkeys.HandleIncomingClient /*&conn*/)
-	//servermodule.Cast1(new(SessionManager), APIkeys.HandleIncomingClient /* , &conn */, 11)
-	//servermodule.Cast(APIkeys.HandleIncomingClient, 11)
-	servermodule.Cast1(APIkeys.HandleIncomingClient, 11)
-
-	servermodule.Cast1(APIkeys.Accept)
+	servermodule.Cast(APIkeys.HandleIncomingClient, conn)
+	servermodule.Cast(APIkeys.Accept)
 
 }
 
 func (tlsServer *TlsServer) Init() {
-
+	servermodule.RegisterAPI((*TlsServer).Receive, APIkeys.Receive)
 	servermodule.RegisterAPI((*TlsServer).Accept, APIkeys.Accept)
 	cer, err := tls.LoadX509KeyPair("./src/murgo/config/server.crt", "./src/murgo/config/server.key")
 	if err != nil {
@@ -44,6 +38,9 @@ func (tlsServer *TlsServer) Init() {
 	//server start to listen on tls
 	tlsConfig := &tls.Config{Certificates: []tls.Certificate{cer}}
 	tlsServer.ln, err = tls.Listen(config.CONN_TYPE, config.DEFAULT_PORT, tlsConfig)
+
+	/*ln, err := net.Listen(config.CONN_TYPE, config.DEFAULT_PORT)
+	tlsServer.ln = ln*/
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -51,8 +48,7 @@ func (tlsServer *TlsServer) Init() {
 	//todo : accept routine into framework
 	// todo : make accept as a cast req
 
-	servermodule.Cast1(APIkeys.Accept)
-
+	servermodule.Cast(APIkeys.Accept)
 }
 
 /*
@@ -85,4 +81,24 @@ func (ts *TlsServer) terminate() {
 	ts.ln.Close()
 	//todo : 메모리 회수 및 나머지 작업
 
+}
+
+func (t *TlsServer) Receive(client *Client) {
+	// todo : goroutine is to be blocked here,
+	// todo : check the trade offs of keeping one io reader and this
+	for {
+		msg, err := client.readProtoMessage()
+		if err != nil {
+			if err != nil {
+				if err == io.EOF {
+					client.Disconnect()
+				} else {
+					//client.Panicf("%v", err)
+				}
+				return
+			}
+		}
+		servermodule.Cast(APIkeys.HandleMessage, msg)
+		/*servermodule.Cast(APIkeys.Receive, client)*/
+	}
 }

@@ -11,16 +11,6 @@ import (
 
 type MessageHandler struct{}
 
-func (messageHandler *MessageHandler) handleCast(castData interface{}) {
-	switch castData.(type) {
-	default:
-		panic("Handling cast of unexpected type in message handler")
-	case *Message:
-		msg := castData.(*Message)
-		messageHandler.HandleMassage(msg)
-	}
-}
-
 func (messageHandler *MessageHandler) HandleMassage(msg *Message) {
 	switch msg.kind {
 	case mumbleproto.MessageAuthenticate:
@@ -101,9 +91,9 @@ func (messageHandler *MessageHandler) handleAuthenticateMessage(msg *Message) {
 		return
 	}
 	/// send channel state
-	servermodule.Cast(APIkeys.SendChannellist, client)
+	servermodule.Cast(APIkeys.SendChannelList, client)
 	// enter the root channel as default channel
-	servermodule.Cast(APIkeys.UserEnterChannel, client, ROOT_CHANNEL)
+	servermodule.Cast(APIkeys.EnterChannel, ROOT_CHANNEL, client)
 
 	sync := &mumbleproto.ServerSync{}
 	sync.Session = proto.Uint32(uint32(client.session))
@@ -144,7 +134,9 @@ func (messageHandler *MessageHandler) handlePingMessage(msg *Message) {
 	})
 }
 
-/*func (messageHandler *MessageHandler) handleUserStateMessage(msg *Message) {
+/*
+
+func (messageHandler *MessageHandler) handleUserStateMessage(msg *Message) {
 
 	// 메시지를 보낸 유저 reset idle -> 이 부분은 통합
 	userstate := &mumbleproto.UserState{}
@@ -216,11 +208,12 @@ func (messageHandler *MessageHandler) handlePingMessage(msg *Message) {
 		}
 	}
 
-}*/
+}
+*/
 
 //구현된 핸들링 함수
 func (messageHandler *MessageHandler) handleChannelStateMessage(tempMsg interface{}) {
-	msg := tempMsg.(Message)
+	msg := tempMsg.(*Message)
 	channelStateMsg := &mumbleproto.ChannelState{}
 	err := proto.Unmarshal(msg.buf, channelStateMsg)
 	if err != nil {
@@ -229,7 +222,7 @@ func (messageHandler *MessageHandler) handleChannelStateMessage(tempMsg interfac
 	}
 	fmt.Println("ChannelState info:", channelStateMsg, "from:", msg.client.UserName)
 	if channelStateMsg.ChannelId == nil && channelStateMsg.Name != nil && *channelStateMsg.Temporary == true && *channelStateMsg.Parent == 0 && *channelStateMsg.Position == 0 {
-		servermodule.Cast(APIkeys.AddChannel, *channelStateMsg.Name, msg.client.session)
+		servermodule.Cast(APIkeys.AddChannel, *channelStateMsg.Name, msg.client)
 	}
 }
 func (messageHandler *MessageHandler) handleUserStatsMessage(msg *Message) {
@@ -402,7 +395,7 @@ func (messageHandler *MessageHandler) handleChannelRemoveMessage(msg *Message) {
 
 // TODO : permission 처리 나누어서 구현
 // Send message when permission denied
-func sendPermissionDenied(client *TlsClient, denyType mumbleproto.PermissionDenied_DenyType) {
+func sendPermissionDenied(client *Client, denyType mumbleproto.PermissionDenied_DenyType) {
 	permissionDeniedMsg := &mumbleproto.PermissionDenied{
 		Session: proto.Uint32(client.Session()),
 		Type:    &denyType,
@@ -418,4 +411,5 @@ func sendPermissionDenied(client *TlsClient, denyType mumbleproto.PermissionDeni
 
 func (m *MessageHandler) Init() {
 	servermodule.RegisterAPI((*MessageHandler).HandleMassage, APIkeys.HandleMessage)
+
 }

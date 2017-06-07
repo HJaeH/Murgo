@@ -6,9 +6,6 @@ import (
 )
 
 const (
-	singleGoRoutineSize   = 1
-	multipleGoRoutineSize = 3
-
 	routerQueueSize = 5
 )
 
@@ -54,65 +51,41 @@ func (r *Router) run() {
 		select {
 
 		case m := <-r.castRouter:
-
+			//fmt.Println(m.apiKey, " from cast router")
 			select {
 			//check whether this module is available now or not
-			case r.apiMap[m.apiKey].module.sync <- true:
-
-				api := r.apiMap[m.apiKey]
-				m.apiVal = api.val
-				//msg.temp.val = api.val
-
-				//msg.syncChan = r.apiMap[msg.apiKey].module.sync
-
+			case getAPI(m.apiKey).module.sync <- true:
+				api := getAPI(m.apiKey)
+				mod := r.apiMap[m.apiKey].module
 				api.module.sup.castChan <- &CastMessage{
 					args:     m.args,
-					apiVal:   m.apiVal,
-					syncChan: r.apiMap[m.apiKey].module.sync,
+					apiVal:   api.val,
+					syncChan: mod.sync,
+					apiKey:   m.apiKey,
+					wg:       mod.wg,
 				}
 
 			default:
-				fmt.Println("!@#")
+				//todo : 일단 임시방편, module 버퍼가 가득 찬 경우에 메시지 손실 생기는거 방지,
+				r.castRouter <- m
+
 			}
-			/*inputs := make([]reflect.Value, len(m.args))
-			for i, _ := range m.args {
-				inputs[i] = reflect.ValueOf(m.args[i])
-			}
-			fmt.Println(inputs)
-			//m.val.Call([]reflect.Value{})
-			m.apiVal.Call(inputs)*/
-		default:
 		}
 
 	}
 
 }
 
-func cast(apiKey int, args ...interface{}) {
-
-	/*if args == nil {
-		args = nil
-	}
-	*/
-	//todo : by adding message creator, cope with multiple goroutine case
-	/*	router.castRouter <- &CastMessage{
-		apiVal: router.apiMap[apiKey].val,
-		args:   args,
-		apiKey: apiKey,
-		//syncChan: make(chan int, singleGoRoutineSize),
-	}*/
-}
-
-func Cast1(key int, args ...interface{}) {
-	fmt.Println(key, args, "============")
-	//reflect.ValueOf(temp).MethodByName("HandleIncomingClient").Call([]reflect.Value{})
-	/*reflect.ValueOf(temp).MethodByName("HandleIncommingClient").Call([]reflect.Value{})*/
+func cast(key int, args ...interface{}) {
 
 	router.castRouter <- &CastMessage{
-		apiVal: router.apiMap[key].val,
 		args:   args,
 		apiKey: key,
 	}
+}
+
+func Cast(key int, args ...interface{}) {
+	cast(key, args...)
 
 }
 
@@ -132,14 +105,12 @@ func Call(key int, args ...interface{}) bool {
 	return true
 }
 
-func Cast(key int, args ...interface{}) {
-	fmt.Println("cast!@#!@!!!!!!!!!!!!!!!!!!!")
-
-	/*if args == nil {
-		cast(key)
+func getAPI(apiKey int) *API {
+	if api, ok := router.apiMap[apiKey]; ok {
+		return api
 	} else {
-		cast(key, args)
-
+		fmt.Println("Invalid API key: %s", apiKey)
+		panic("Invalid API key")
 	}
-	*/
+
 }
