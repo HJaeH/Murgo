@@ -13,24 +13,23 @@ type GenServer struct {
 	isRunning    bool
 	isSupervisor bool
 
-	resource     interface{}
-	callback     Callback
+	resource interface{}
+	callback Callback
 
-	parent       *Supervisor
+	parent *Supervisor
 }
 type Callback interface {
 	Terminate() // todo : interface 함수 상속 관계에서 구현시 어떤게 call 되는지 확인 필요
 	Init()
-
 }
 type CastMessage struct {
 	funcName string
-	args []interface {}
+	args     []interface{}
 }
 
 type CallMessage struct {
-	funcName string
-	args []interface {}
+	funcName   string
+	args       []interface{}
 	returnChan chan *CallReply
 }
 
@@ -46,8 +45,8 @@ func NewGenServer(interface{}) *GenServer {
 }
 
 func (genServer *GenServer) init() {
-	genServer.callChannel = make (chan *CallMessage)
-	genServer.castChannel = make (chan *CastMessage)
+	genServer.callChannel = make(chan *CallMessage)
+	genServer.castChannel = make(chan *CastMessage)
 	genServer.isRunning = false
 	genServer.isSupervisor = false
 }
@@ -55,28 +54,27 @@ func (genServer *GenServer) Cast(target *GenServer, msg *CastMessage) {
 	genServer.parent.sendCast(target, msg)
 
 }
-func (genServer *GenServer) Call (target *GenServer, msg *CallMessage){
+func (genServer *GenServer) Call(target *GenServer, msg *CallMessage) {
 	genServer.parent.sendCall(target, msg)
 }
 
-func (genServer *GenServer) Terminate (){
+func (genServer *GenServer) Terminate() {
 	//todo 각각 모듈에서 필요한 terminate 작업 필요 -> interface 로 callback 구현
 	genServer.closeChannel <- 1
 }
 
-
 //////////////////////////
 /// internal functions ///
 //////////////////////////
-func (genServer *GenServer) start (){
+func (genServer *GenServer) start() {
 	if genServer.isRunning {
 		fmt.Println("Genserver is already running on server")
 		return
 	}
 	genServer.isRunning = true
 
-	defer func(){
-		if err:= recover(); err!= nil{
+	defer func() {
+		if err := recover(); err != nil {
 			fmt.Println("genserver recovered")
 			genServer.start()
 		}
@@ -90,13 +88,13 @@ func (genServer *GenServer) start (){
 			genServer.handleCast(castData)
 		case <-genServer.closeChannel:
 			return // todo: 그냥 return은 recover 안걸리는지 체크
-				// todo: memory free garbage collection 체크
+			// todo: memory free garbage collection 체크
 		}
 	}
 
 }
 
-func (genServer *GenServer) handleCast (castData interface{}){
+func (genServer *GenServer) handleCast(castData interface{}) {
 	temp := castData.(CastMessage)
 	funcName := temp.funcName
 	args := temp.args
@@ -110,7 +108,7 @@ func (genServer *GenServer) handleCast (castData interface{}){
 	reflect.ValueOf(genServer).MethodByName(funcName).Call(inputs)
 }
 
-func (genServer *GenServer) handleCall (msg *CallMessage){
+func (genServer *GenServer) handleCall(msg *CallMessage) {
 	funcName := msg.funcName
 	args := msg.args
 	returnChan := msg.returnChan
@@ -123,7 +121,7 @@ func (genServer *GenServer) handleCall (msg *CallMessage){
 	}
 	reflect.ValueOf(genServer).MethodByName(funcName).Call(inputs)
 	returnChan <- &CallReply{
-		//sender: ,
+	//sender: ,
 
 	} // todo : call return 작업중
 
