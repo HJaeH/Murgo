@@ -44,8 +44,54 @@ func (c *ChannelManager) init() {
 	c.nextChannelID = ROOT_CHANNEL + 1
 }
 
-func (c *ChannelManager) AddChannel(channelName string, client *Client) {
-	for _, eachChannel := range c.channelList {
+const ( // TODO : keep other module from accessing those, enum or name space,,,,
+	addChannel uint16 = iota
+	broadCastChannel
+	sendChannelList
+	userEnterChannel
+)
+
+// channel receiving loop
+func (channelManager *ChannelManager) startChannelManager() {
+
+	// panic 발생시 모든 모듈의 이 시점으로 리턴할 것
+	// TODO : 일단 에러 발생 시점 파악을 위해 주석처리 이후에 슈퍼바이저에서 코드 통합 강구
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Println("Channel manager recovered")
+			channelManager.startChannelManager()
+		}
+	}()
+
+	for {
+		select {
+		case castData := <-channelManager.Cast:
+			channelManager.handleCast(castData)
+		}
+	}
+}
+
+// TODO : cast data could be a function .
+func (channelManager *ChannelManager) handleCast(castData interface{}) {
+	murgoMsg := castData.(*MurgoMessage)
+
+	switch murgoMsg.kind {
+	default:
+		panic("Handling cast of unexpected type in channel manager")
+	case addChannel:
+		channelManager.addChannel(murgoMsg.ChannelName, murgoMsg.client)
+	case userEnterChannel:
+		channelManager.userEnterChannel(murgoMsg.channelId, murgoMsg.client)
+	case broadCastChannel:
+		channelManager.broadCastChannel(murgoMsg.channelId, murgoMsg.msg)
+	case sendChannelList:
+		channelManager.sendChannelList(murgoMsg.client)
+	}
+
+}
+
+func (channelManager *ChannelManager) addChannel(channelName string, client *TlsClient) {
+	for _, eachChannel := range channelManager.channelList {
 		if eachChannel.Name == channelName {
 			//todo : client object 없에는 과정
 			//sendPermissionDenied(client, mumbleproto.PermissionDenied_ChannelName)
@@ -54,9 +100,9 @@ func (c *ChannelManager) AddChannel(channelName string, client *Client) {
 		}
 	}
 	// create new channel
-	channel := NewChannel(c.nextChannelID, channelName)
-	c.nextChannelID++
-	c.channelList[channel.Id] = channel
+	channel := NewChannel(channelManager.nextChannelID, channelName)
+	channelManager.nextChannelID++
+	channelManager.channelList[channel.Id] = channel
 
 	//let all session know the created channel
 	channelStateMsg := channel.toChannelState()
@@ -138,7 +184,7 @@ func (c *ChannelManager) EnterChannel(channelId int, client *Client) {
 		}
 	}
 
-	client.Channel = newChannel
+	client.channel = newChannel
 	newChannel.addClient(client)
 	userState := client.ToUserState()
 

@@ -16,7 +16,7 @@ type Channel struct {
 	Position int
 
 	temporary   bool
-	clients     map[uint32]*Client
+	clients     map[uint32]*TlsClient
 	parentId    int
 	children    map[int]*Channel
 	description string
@@ -50,11 +50,11 @@ func (channel *Channel) removeClient(client *Client) {
 	delete(channel.clients, client.Session())
 	client.Channel = nil
 }
-func (channel *Channel) addClient(client *Client) {
+func (channel *Channel) addClient(client *TlsClient) {
 	channel.clients[client.Session()] = client
 }
 
-func (channel *Channel) toChannelState() *mumbleproto.ChannelState {
+func (channel *Channel) ToChannelState() *mumbleproto.ChannelState {
 	channelStateMsg := &mumbleproto.ChannelState{
 		ChannelId:   proto.Uint32(uint32(channel.Id)),
 		Parent:      proto.Uint32(uint32(channel.parentId)),
@@ -66,7 +66,7 @@ func (channel *Channel) toChannelState() *mumbleproto.ChannelState {
 	return channelStateMsg
 }
 
-func (channel *Channel) SendUserListInChannel(client *Client) {
+func (channel *Channel) sendUserListInChannel(client *TlsClient) {
 	fmt.Println(channel.Name)
 	for _, eachUser := range channel.clients {
 		fmt.Print(eachUser.UserName)

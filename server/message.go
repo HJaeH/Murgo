@@ -3,22 +3,19 @@ package server
 type Message struct {
 	buf         []byte
 	kind        uint16
-	client      *Client
+	client      *TlsClient
 	testCounter int
 }
 
 /*
 type MurgoMessage struct {
-	FuncName    string
-
-
-	Kind        uint16
-	ChannelId   int
-	Client      *TlsClient
-	Channel     *Channel
-	Msg         interface{}
+	kind        uint16
+	channelId   int
+	client      *TlsClient
+	channel     *Channel
+	msg         interface{}
 	ChannelName string
-	Conn        *net.Conn
-	CastReply   chan interface{}
+	conn        *net.Conn
+	castReply   chan interface{}
 }
 */

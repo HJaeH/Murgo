@@ -15,29 +15,78 @@ import (
 )
 
 type SessionManager struct {
-	clientList   map[uint32]*Client
-	sessionPool  *sessionpool.SessionPool
-	clientIdList map[uint32]*Client
+	supervisor *Supervisor
+
+	clientList map[uint32]*TlsClient
+
+	sessionPool *sessionpool.SessionPool
+
+	Cast chan interface{}
+	Call chan interface{}
 }
 
-func (s *SessionManager) getClientList() map[uint32]*Client {
-	return s.clientList
+func NewSessionManager(supervisor *Supervisor) *SessionManager {
+	sessionManager := new(SessionManager)
+	sessionManager.Cast = make(chan interface{})
+	sessionManager.supervisor = supervisor
+	sessionManager.sessionPool = sessionpool.New()
+	sessionManager.clientList = make(map[uint32]*TlsClient)
+	return sessionManager
 }
 
-//Callbacks
-func (s *SessionManager) Init() {
-	servermodule.RegisterAPI((*SessionManager).HandleIncomingClient, APIkeys.HandleIncomingClient)
-	servermodule.RegisterAPI((*SessionManager).BroadcastMessage, APIkeys.BroadcastMessage)
-	servermodule.RegisterAPI((*SessionManager).SetUserOption, APIkeys.SetUserOption)
+const (
+	broadcastMessage uint16 = iota
+	handleIncomingClient
+)
 
-	s.sessionPool = sessionpool.New()
-	s.clientList = make(map[uint32]*Client)
+func (sessionManager *SessionManager) startSessionManager() {
+
+	// TODO : panic 발생시 모든 모듈의 이 시점으로 리턴할 것
+	// TODO : 일단 에러 발생 시점 파악을 위해 주석처리 이후에 슈퍼바이저에서 코드 통합 강구
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Println("Session manager recovered")
+			sessionManager.startSessionManager()
+		}
+	}()
+
+	for {
+		select {
+		case castData := <-sessionManager.Cast:
+			sessionManager.handleCast(castData)
+
+		}
+	}
 }
 
-//// APIs
-func (s *SessionManager) HandleIncomingClient(conn net.Conn) {
-	//conn = (*net.Conn)conn
-	//var conn = new(nest.Conn)
+//todo 분기 함수포인터로 바로 접근 하는 방법.
+/*
+func (sessionManager *SessionManager)ha(msg *Message) {
+	if
+	handle(sessionManager.clientList)
+}
+
+func (sessionManager *SessionManager)handle(F func(int, int)() ) {
+
+	F(3, 4)
+}
+*/
+
+func (sessionManager *SessionManager) handleCast(castData interface{}) {
+	murgoMsg := castData.(*MurgoMessage)
+
+	switch murgoMsg.kind {
+	default:
+		fmt.Printf("unexpected type %T", murgoMsg.kind)
+	case broadcastMessage:
+		sessionManager.broadcastMessage(murgoMsg.msg)
+	case handleIncomingClient:
+		sessionManager.handleIncomingClient(murgoMsg.conn)
+	}
+}
+
+func (sessionManaser *SessionManager) handleIncomingClient(conn *net.Conn) {
+
 	//init tls client
 
 	session := s.sessionPool.Get()
@@ -63,10 +112,8 @@ func (s *SessionManager) HandleIncomingClient(conn net.Conn) {
 	servermodule.Cast(APIkeys.Receive, client)
 	//servermodule.Supervisor.StartGenServer()
 
-}
-
-func (s *SessionManager) BroadcastMessage(msg interface{}) {
-	for _, eachClient := range s.clientList {
+func (sessionManager *SessionManager) broadcastMessage(msg interface{}) {
+	for _, eachClient := range sessionManager.clientList {
 		/*if client.state < StateClientAuthenticated {
 			continue
 		}*/
@@ -127,7 +174,7 @@ func (s *SessionManager) SetUserOption(userState *mumbleproto.UserState) {
 	}
 }
 
-// todo : cast time.Time type to number type or overloading
+// todo : cast time.Time type to number type or check overlaoding
 /*
 func elapsed(prev time.Time, now time.Time)(time.Time){
 	return now - prev

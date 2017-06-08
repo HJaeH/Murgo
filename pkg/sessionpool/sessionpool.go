@@ -88,6 +88,5 @@ func (pool *SessionPool) Reclaim(id uint32) {
 		}
 		delete(pool.used, id)
 	}
-
 	pool.unused = append(pool.unused, id)
 }

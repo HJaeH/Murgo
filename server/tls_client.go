@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 
@@ -24,11 +23,11 @@ type TlsClient struct {
 	*servermodule.GenServer
 
 	// 유저가 접속중인 channel
-	Channel *Channel
+	channel *Channel
 	conn    *net.Conn
 	session uint32
 
-	UserName string
+	userName string
 	userId   int
 	reader   *bufio.Reader
 
@@ -59,17 +58,11 @@ type TlsClient struct {
 
 	//for test
 	testCounter int
-
-	clientAction
-}
-
-type clientAction interface {
-	PrintClient(m string)
 }
 
 // called at session manager
-//func NewTlsClient(conn *net.Conn, session uint32, supervisor *MurgoSupervisor) (*TlsClient){
-func NewTlsClient(conn *net.Conn, session uint32) *TlsClient {
+func NewTlsClient(conn *net.Conn, session uint32, supervisor *Supervisor) *TlsClient {
+
 	//create new object
 	tlsClient := new(TlsClient)
 	tlsClient.cryptState = new(config.CryptState)
@@ -88,8 +81,6 @@ func NewTlsClient(conn *net.Conn, session uint32) *TlsClient {
 }
 
 func (tlsClient *TlsClient) recvLoop() {
-
-	tlsClient.PrintClient("dasdfd")
 	for {
 		msg, err := tlsClient.readProtoMessage()
 		if err != nil {
@@ -109,12 +100,9 @@ func (tlsClient *TlsClient) recvLoop() {
 
 }
 
-func (tlsClient *TlsClient) PrintClient(m string) {
-	fmt.Println(m)
-}
-
+///// internal functions
 //send msg to client
-func (tlsClient *TlsClient) SendMessage(msg interface{}) error {
+func (tlsClient *TlsClient) sendMessage(msg interface{}) error {
 
 	buf := new(bytes.Buffer)
 	var (
@@ -201,9 +189,9 @@ func (tlsClient *TlsClient) ToUserState() *mumbleproto.UserState {
 
 	userStateMsg := &mumbleproto.UserState{
 		Session:   proto.Uint32(tlsClient.session),
-		Name:      proto.String(tlsClient.UserName),
+		Name:      proto.String(tlsClient.userName),
 		UserId:    proto.Uint32(uint32(tlsClient.userId)),
-		ChannelId: proto.Uint32(uint32(tlsClient.Channel.Id)),
+		ChannelId: proto.Uint32(uint32(tlsClient.channel.Id)),
 		Mute:      proto.Bool(tlsClient.mute),
 		Deaf:      proto.Bool(tlsClient.deaf),
 		Suppress:  proto.Bool(tlsClient.suppress),

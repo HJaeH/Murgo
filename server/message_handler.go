@@ -9,7 +9,52 @@ import (
 	"github.com/golang/protobuf/proto"
 )
 
-type MessageHandler struct{}
+type MessageHandler struct {
+	supervisor *Supervisor
+
+	Cast chan interface{}
+	Call chan interface{}
+}
+
+func NewMessageHandler(supervisor *Supervisor) *MessageHandler {
+	messageHandler := new(MessageHandler)
+	messageHandler.supervisor = supervisor
+
+	messageHandler.Cast = make(chan interface{})
+	return messageHandler
+}
+
+func (messageHandler *MessageHandler) startMassageHandler() {
+	// panic 발생시 모든 모듈의 이 시점으로 리턴할 것
+	// TODO : 일단 에러 발생 시점 파악을 위해 주석처리 이후에 슈퍼바이저에서 코드 통합 강구
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Println("Message Handler recovered")
+			messageHandler.startMassageHandler()
+		}
+	}()
+
+	fmt.Println("Message Handler stared")
+	for {
+		select {
+		case castData := <-messageHandler.Cast:
+			messageHandler.handleCast(castData)
+
+		}
+	}
+}
+
+func (messageHandler *MessageHandler) handleCast(castData interface{}) {
+	switch castData.(type) {
+	default:
+		panic("Handling cast of unexpected type in message handler")
+	case *Message:
+		msg := castData.(*Message)
+		messageHandler.handleMassage(msg)
+	}
+}
+
+func (messageHandler *MessageHandler) handleMassage(msg *Message) {
 
 func (messageHandler *MessageHandler) HandleMassage(msg *Message) {
 	switch msg.kind {
@@ -147,11 +192,69 @@ func (messageHandler *MessageHandler) handleUserStateMessage(msg *Message) {
 	}
 	fmt.Println("userstate info:", userState, "msg id :", msg.testCounter, "from:", msg.client.UserName)
 	//Channel ID 필드 값이 있는 경우
-	if userState.ChannelId != nil {
-		servermodule.Cast(APIkeys.EnterChannel, int(*userState.ChannelId), msg.client)
+	if userstate.ChannelId != nil {
+		messageHandler.supervisor.cm.Cast <- &MurgoMessage{
+			kind:      userEnterChannel,
+			channelId: int(*userstate.ChannelId),
+			client:    msg.client, // temp target
+		}
 	}
 
-	servermodule.Cast(APIkeys.SetUserOption, userState)
+	clients := messageHandler.supervisor.tc
+	channelManager := messageHandler.supervisor.cm
+
+	actor, ok := clients[msg.client.Session()]
+	if !ok {
+		//server.Panic("Client not found in server's client map.")
+		return
+	}
+
+	//actor는 메시지를 보낸 클라이언트
+	//target은 메세지 패킷의 session
+
+	target := actor
+	if userstate.Session != nil {
+		// target -> 메시지의 session에 해당하는 client 메시지의 대상. sender일 수도 있고 아닐 수도 있다
+		target, ok = clients[*userstate.Session]
+		if !ok {
+			fmt.Println("Invalid session in UserState message")
+			return
+		}
+	}
+
+	userstate.Session = proto.Uint32(target.Session())
+	userstate.Actor = proto.Uint32(actor.Session())
+
+	tempUserState := &mumbleproto.UserState{}
+	if userstate.Mute != nil {
+		if actor.Session() != target.Session() {
+			//can't change other users mute state
+			//permission denied
+			sendPermissionDenied(actor, mumbleproto.PermissionDenied_Permission)
+		} else {
+			// 변경
+			tempUserState.Mute = userstate.Mute
+		}
+	} else {
+		if actor.Session() != target.Session() {
+			if actor.mute == false {
+
+			}
+		}
+	}
+	newMsg := &mumbleproto.UserState{
+		Deaf:     proto.Bool(false),
+		SelfDeaf: proto.Bool(false),
+		Name:     userstate.Name,
+	}
+
+	if userstate.ChannelId != nil {
+		channelManager.Cast <- &MurgoMessage{
+			kind:      broadCastChannel,
+			channelId: int(*userstate.ChannelId),
+			msg:       newMsg,
+		}
+	}
 
 }
 
@@ -230,9 +333,11 @@ func (m *MessageHandler) handleTextMessage(msg *Message) {
 			ChannelId: textMsg.ChannelId,
 			Message:   textMsg.Message,
 		}
-
-		servermodule.Cast(APIkeys.BroadcastChannel, newMsg, int(textMsg.ChannelId[0]))
-
+		messageHandler.supervisor.cm.Cast <- &MurgoMessage{
+			kind:      broadCastChannel,
+			msg:       newMsg,
+			channelId: int(textMsg.ChannelId[0]),
+		}
 	} else if textMsg.Session != nil {
 
 	}

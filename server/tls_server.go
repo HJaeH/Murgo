@@ -1,6 +1,7 @@
 package server
 
 import (
+	"crypto/tls"
 	"fmt"
 
 	"crypto/tls"
@@ -9,13 +10,20 @@ import (
 	"murgo/pkg/servermodule"
 	APIkeys "murgo/server/util"
 	"net"
+	"reflect"
 )
 
 type TlsServer struct {
-	ln net.Listener
-
-	//todo : need to be deleted
+	supervisor  *Supervisor
+	sessionPool *sessionpool.SessionPool
+	tlsConfig   *tls.Config
+	Cast        chan interface{}
+	Call        chan interface{}
 }
+
+func NewTlsServer(supervisor *Supervisor) *TlsServer {
+	tlsServer := new(TlsServer)
+	tlsServer.supervisor = supervisor
 
 func (tlsServer *TlsServer) Accept() {
 	conn, err := tlsServer.ln.Accept()
@@ -48,18 +56,16 @@ func (tlsServer *TlsServer) Init() {
 	//todo : accept routine into framework
 	// todo : make accept as a cast req
 
-	servermodule.Cast(APIkeys.Accept)
-}
-
-/*
-func (ts *TlsServer) HandleCast(request string, args ...interface{}) {
-
-	if args == nil {
-		reflect.ValueOf(ts).MethodByName(request).Call([]reflect.Value{})
-	} else {
-		inputs := make([]reflect.Value, len(args))
-		for i, _ := range args {
-			inputs[i] = reflect.ValueOf(args[i])
+	//accept loop와 cast handling 수행
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			fmt.Println(" Accepting a conneciton failed handling a client")
+			//continue
+		}
+		tlsServer.supervisor.sm.Cast <- &MurgoMessage{
+			kind: handleIncomingClient,
+			conn: &conn,
 		}
 		reflect.ValueOf(ts).MethodByName(request).Call(inputs)
 	}
@@ -81,38 +87,4 @@ func (ts *TlsServer) terminate() {
 	ts.ln.Close()
 	//todo : 메모리 회수 및 나머지 작업
 
-}
-
-func (t *TlsServer) Receive(client *Client) {
-
-	for {
-		msg, err := client.readProtoMessage()
-		if err != nil {
-			if err != nil {
-				if err == io.EOF {
-					client.Disconnect()
-				} else {
-					//client.Panicf("%v", err)
-				}
-				return
-			}
-		}
-		servermodule.Cast(APIkeys.HandleMessage, msg)
-	}
-	/*
-		// todo : 여기서 고루틴이 블락 되기 때문에, 여전히 세션 수 만큼 고루틴 필요함
-		// todo  : 고루틴 한개에서 네트워크 패킷을 다 받도록 했을 떄 고려해보자
-		msg, err := client.readProtoMessage()
-		if err != nil {
-			if err != nil {
-				if err == io.EOF {
-					client.Disconnect()
-				} else {
-					//client.Panicf("%v", err)
-				}
-				return
-			}
-		}
-		servermodule.Cast(APIkeys.HandleMessage, msg)
-		servermodule.Cast(APIkeys.Receive, client)*/
 }
