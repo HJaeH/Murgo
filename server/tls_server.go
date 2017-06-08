@@ -4,25 +4,23 @@
 
 package server
 
-
 import (
-	"fmt"
 	"crypto/tls"
+	"fmt"
 
 	"murgo/config"
 	"murgo/pkg/sessionpool"
 )
 
 type TlsServer struct {
-	supervisor *Supervisor
+	supervisor  *Supervisor
 	sessionPool *sessionpool.SessionPool
-	tlsConfig  *tls.Config
-	Cast chan interface{}
-	Call chan interface{}
+	tlsConfig   *tls.Config
+	Cast        chan interface{}
+	Call        chan interface{}
 }
 
-
-func NewTlsServer(supervisor *Supervisor) (*TlsServer) {
+func NewTlsServer(supervisor *Supervisor) *TlsServer {
 	tlsServer := new(TlsServer)
 	tlsServer.supervisor = supervisor
 
@@ -56,10 +54,9 @@ func (tlsServer *TlsServer) startTlsServer() {
 			//continue
 		}
 		tlsServer.supervisor.sm.Cast <- &MurgoMessage{
-			kind:handleIncomingClient,
-			conn:&conn,
+			kind: handleIncomingClient,
+			conn: &conn,
 		}
 
 	}
 }
-

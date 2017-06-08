@@ -28,10 +28,10 @@ func NewMessageHandler(supervisor *Supervisor) *MessageHandler {
 }
 
 func (messageHandler *MessageHandler) startMassageHandler() {
-	 // panic 발생시 모든 모듈의 이 시점으로 리턴할 것
+	// panic 발생시 모든 모듈의 이 시점으로 리턴할 것
 	// TODO : 일단 에러 발생 시점 파악을 위해 주석처리 이후에 슈퍼바이저에서 코드 통합 강구
-	defer func(){
-		if err:= recover(); err!= nil{
+	defer func() {
+		if err := recover(); err != nil {
 			fmt.Println("Message Handler recovered")
 			messageHandler.startMassageHandler()
 		}
@@ -207,7 +207,6 @@ func (messageHandler *MessageHandler) handleUserStateMessage(msg *Message) {
 		}
 	}
 
-
 	clients := messageHandler.supervisor.tc
 	channelManager := messageHandler.supervisor.cm
 
@@ -220,8 +219,6 @@ func (messageHandler *MessageHandler) handleUserStateMessage(msg *Message) {
 	//actor는 메시지를 보낸 클라이언트
 	//target은 메세지 패킷의 session
 
-
-
 	target := actor
 	if userstate.Session != nil {
 		// target -> 메시지의 session에 해당하는 client 메시지의 대상. sender일 수도 있고 아닐 수도 있다
@@ -232,12 +229,8 @@ func (messageHandler *MessageHandler) handleUserStateMessage(msg *Message) {
 		}
 	}
 
-
-
-
 	userstate.Session = proto.Uint32(target.Session())
 	userstate.Actor = proto.Uint32(actor.Session())
-
 
 	tempUserState := &mumbleproto.UserState{}
 	if userstate.Mute != nil {
@@ -346,23 +339,19 @@ func (messageHandler *MessageHandler) handleTextMessage(msg *Message) {
 
 	if textMsg.ChannelId != nil {
 		newMsg := mumbleproto.TextMessage{
-			Actor:textMsg.Actor,
-			Session:textMsg.Session,
+			Actor:     textMsg.Actor,
+			Session:   textMsg.Session,
 			ChannelId: textMsg.ChannelId,
-			Message: textMsg.Message,
+			Message:   textMsg.Message,
 		}
 		messageHandler.supervisor.cm.Cast <- &MurgoMessage{
-			kind:broadCastChannel,
-			msg:newMsg,
-			channelId:int(textMsg.ChannelId[0]),
+			kind:      broadCastChannel,
+			msg:       newMsg,
+			channelId: int(textMsg.ChannelId[0]),
 		}
 	} else if textMsg.Session != nil {
 
 	}
-
-
-
-
 
 }
 

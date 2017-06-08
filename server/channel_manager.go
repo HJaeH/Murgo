@@ -62,8 +62,8 @@ func (channelManager *ChannelManager) startChannelManager() {
 
 	// panic 발생시 모든 모듈의 이 시점으로 리턴할 것
 	// TODO : 일단 에러 발생 시점 파악을 위해 주석처리 이후에 슈퍼바이저에서 코드 통합 강구
-	defer func(){
-		if err:= recover(); err!= nil{
+	defer func() {
+		if err := recover(); err != nil {
 			fmt.Println("Channel manager recovered")
 			channelManager.startChannelManager()
 		}
@@ -108,7 +108,6 @@ func (channelManager *ChannelManager) addChannel(channelName string, client *Tls
 	channel := NewChannel(channelManager.nextChannelID, channelName)
 	channelManager.nextChannelID++
 	channelManager.channelList[channel.Id] = channel
-
 
 	//let all session know the created channel
 	channelStateMsg := channel.ToChannelState()
@@ -192,19 +191,15 @@ func (channelManager *ChannelManager) userEnterChannel(channelId int, client *Tl
 		}
 	}
 
-
-
 	client.channel = newChannel
 	newChannel.addClient(client)
 	userState := client.ToUserState()
-
 
 	if oldChannel != nil && oldChannel.Id != ROOT_CHANNEL {
 		//이전 채널에 떠났음을 알림
 		channelManager.broadCastChannelWithoutMe(oldChannel.Id, userState, client)
 	}
 	// 변한 상태를 클라이언트에게 알림
-
 
 	if newChannel.Id != ROOT_CHANNEL {
 		//새 채널입장을 채널 유저들에게 알림
@@ -274,7 +269,3 @@ func (channelManager *ChannelManager) printChannels() {
 	}
 	fmt.Println()
 }
-
-
-
-

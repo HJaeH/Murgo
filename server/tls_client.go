@@ -4,14 +4,13 @@
 
 package server
 
-
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"net"
 	"io"
-	"bufio"
+	"net"
 
 	"murgo/config"
 	"murgo/pkg/mumbleproto"
@@ -19,33 +18,32 @@ import (
 	"github.com/golang/protobuf/proto"
 )
 
-
 type TlsClient struct {
 	supervisor *Supervisor
 
 	// 유저가 접속중인 channel
 	channel *Channel
-	conn *net.Conn
+	conn    *net.Conn
 	session uint32
 
 	userName string
-	userId int
-	reader  *bufio.Reader
+	userId   int
+	reader   *bufio.Reader
 
-	tcpaddr *net.TCPAddr
+	tcpaddr  *net.TCPAddr
 	certHash string
 
 	bandWidth *BandWidth
 	//user's setting
-	selfDeaf bool
-	selfMute bool
-	mute bool
-	deaf bool
+	selfDeaf   bool
+	selfMute   bool
+	mute       bool
+	deaf       bool
 	tcpPingAvg float32
 	tcpPingVar float32
 	tcpPackets uint32
-	opus         bool
-	suppress bool
+	opus       bool
+	suppress   bool
 
 	//client auth infomations
 	codecs []int32
@@ -59,13 +57,10 @@ type TlsClient struct {
 
 	//for test
 	testCounter int
-
-
 }
 
-
 // called at session manager
-func NewTlsClient(conn *net.Conn, session uint32, supervisor *Supervisor) (*TlsClient){
+func NewTlsClient(conn *net.Conn, session uint32, supervisor *Supervisor) *TlsClient {
 
 	//create new object
 	tlsClient := new(TlsClient)
@@ -84,7 +79,7 @@ func NewTlsClient(conn *net.Conn, session uint32, supervisor *Supervisor) (*TlsC
 	return tlsClient
 }
 
-func (tlsClient *TlsClient) recvLoop(){
+func (tlsClient *TlsClient) recvLoop() {
 	for {
 		msg, err := tlsClient.readProtoMessage()
 		if err != nil {
@@ -103,11 +98,9 @@ func (tlsClient *TlsClient) recvLoop(){
 	}
 }
 
-
 ///// internal functions
 //send msg to client
 func (tlsClient *TlsClient) sendMessage(msg interface{}) error {
-
 
 	buf := new(bytes.Buffer)
 	var (
@@ -179,35 +172,33 @@ func (tlsClient *TlsClient) readProtoMessage() (msg *Message, err error) {
 	tlsClient.testCounter++
 
 	msg = &Message{
-		buf:    buf,
-		kind:   kind,
-		client: tlsClient,
+		buf:         buf,
+		kind:        kind,
+		client:      tlsClient,
 		testCounter: tlsClient.testCounter,
 	}
 	return msg, err
 }
 
-
 func (tlsClient *TlsClient) Disconnect() {
 
 }
-func (tlsClient *TlsClient) ToUserState()(*mumbleproto.UserState) {
+func (tlsClient *TlsClient) ToUserState() *mumbleproto.UserState {
 
 	userStateMsg := &mumbleproto.UserState{
-		Session: proto.Uint32(tlsClient.session),
-		Name: proto.String(tlsClient.userName),
-		UserId: proto.Uint32(uint32(tlsClient.userId)),
-		ChannelId:proto.Uint32(uint32(tlsClient.channel.Id)),
-		Mute:proto.Bool(tlsClient.mute),
-		Deaf:proto.Bool(tlsClient.deaf),
-		Suppress:proto.Bool(tlsClient.suppress),
-		SelfDeaf:proto.Bool(tlsClient.selfDeaf),
-		SelfMute: proto.Bool(tlsClient.selfMute),
+		Session:   proto.Uint32(tlsClient.session),
+		Name:      proto.String(tlsClient.userName),
+		UserId:    proto.Uint32(uint32(tlsClient.userId)),
+		ChannelId: proto.Uint32(uint32(tlsClient.channel.Id)),
+		Mute:      proto.Bool(tlsClient.mute),
+		Deaf:      proto.Bool(tlsClient.deaf),
+		Suppress:  proto.Bool(tlsClient.suppress),
+		SelfDeaf:  proto.Bool(tlsClient.selfDeaf),
+		SelfMute:  proto.Bool(tlsClient.selfMute),
 	}
 	return userStateMsg
 }
 
-
-func (tlsClient *TlsClient) Session()(uint32) {
+func (tlsClient *TlsClient) Session() uint32 {
 	return tlsClient.session
 }

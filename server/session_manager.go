@@ -14,50 +14,40 @@ import (
 type SessionManager struct {
 	supervisor *Supervisor
 
-	clientList map[uint32] *TlsClient
+	clientList map[uint32]*TlsClient
 
 	sessionPool *sessionpool.SessionPool
 
-
-
 	Cast chan interface{}
 	Call chan interface{}
-
 }
 
-
-
-
-func NewSessionManager (supervisor *Supervisor)(*SessionManager) {
+func NewSessionManager(supervisor *Supervisor) *SessionManager {
 	sessionManager := new(SessionManager)
 	sessionManager.Cast = make(chan interface{})
 	sessionManager.supervisor = supervisor
 	sessionManager.sessionPool = sessionpool.New()
-	sessionManager.clientList = make(map[uint32] *TlsClient)
+	sessionManager.clientList = make(map[uint32]*TlsClient)
 	return sessionManager
 }
-
 
 const (
 	broadcastMessage uint16 = iota
 	handleIncomingClient
-
-
 )
 
-
-func (sessionManager *SessionManager)startSessionManager() {
+func (sessionManager *SessionManager) startSessionManager() {
 
 	// TODO : panic 발생시 모든 모듈의 이 시점으로 리턴할 것
 	// TODO : 일단 에러 발생 시점 파악을 위해 주석처리 이후에 슈퍼바이저에서 코드 통합 강구
-	defer func(){
-		if err:= recover(); err!= nil{
+	defer func() {
+		if err := recover(); err != nil {
 			fmt.Println("Session manager recovered")
 			sessionManager.startSessionManager()
 		}
 	}()
 
-	for{
+	for {
 		select {
 		case castData := <-sessionManager.Cast:
 			sessionManager.handleCast(castData)
@@ -65,6 +55,7 @@ func (sessionManager *SessionManager)startSessionManager() {
 		}
 	}
 }
+
 //todo 분기 함수포인터로 바로 접근 하는 방법.
 /*
 func (sessionManager *SessionManager)ha(msg *Message) {
@@ -78,12 +69,10 @@ func (sessionManager *SessionManager)handle(F func(int, int)() ) {
 }
 */
 
-
-
-func (sessionManager *SessionManager)handleCast(castData interface{}) {
+func (sessionManager *SessionManager) handleCast(castData interface{}) {
 	murgoMsg := castData.(*MurgoMessage)
 
-	switch  murgoMsg.kind {
+	switch murgoMsg.kind {
 	default:
 		fmt.Printf("unexpected type %T", murgoMsg.kind)
 	case broadcastMessage:
@@ -93,8 +82,7 @@ func (sessionManager *SessionManager)handleCast(castData interface{}) {
 	}
 }
 
-
-func (sessionManaser *SessionManager)handleIncomingClient(conn *net.Conn){
+func (sessionManaser *SessionManager) handleIncomingClient(conn *net.Conn) {
 
 	//init tls client
 	session := sessionManaser.sessionPool.Get()
@@ -118,8 +106,7 @@ func (sessionManaser *SessionManager)handleIncomingClient(conn *net.Conn){
 	sessionManaser.supervisor.startGenServer(client.recvLoop)
 }
 
-
-func (sessionManager *SessionManager) broadcastMessage(msg interface{}){
+func (sessionManager *SessionManager) broadcastMessage(msg interface{}) {
 	for _, eachClient := range sessionManager.clientList {
 		/*if client.state < StateClientAuthenticated {
 			continue
@@ -127,6 +114,7 @@ func (sessionManager *SessionManager) broadcastMessage(msg interface{}){
 		eachClient.sendMessage(msg)
 	}
 }
+
 // todo : cast time.Time type to number type or check overlaoding
 /*
 func elapsed(prev time.Time, now time.Time)(time.Time){

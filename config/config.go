@@ -4,9 +4,7 @@
 
 package config
 
-
-
 const (
-	DEFAULT_PORT = ":"+"8000"
-	CONN_TYPE = "tcp"
+	DEFAULT_PORT = ":" + "8000"
+	CONN_TYPE    = "tcp"
 )
