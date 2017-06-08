@@ -1,5 +1,1 @@
-음성채팅 어플리케이션인 Mumble의
-
-서버 모듈인 Murmur를 go 언어로 개발
-
-
+The server module of voice chat application written in Go

@@ -8,17 +8,17 @@ import (
 	"github.com/golang/protobuf/proto"
 )
 
-
 //todo : Each Channel should be a module not just a data structure
 type Channel struct {
+	//todo add num user and keep user ids
 	Id       int
 	Name     string
 	Position int
 
-	temporary bool
-	clients   map[uint32]*TlsClient
-	parentId  int
-	children  map[int]*Channel
+	temporary   bool
+	clients     map[uint32]*Client
+	parentId    int
+	children    map[int]*Channel
 	description string
 
 	// TODO : not used yet
@@ -27,13 +27,11 @@ type Channel struct {
 	//Links map[int]*Channel
 }
 
-
-
 func NewChannel(id int, name string) (channel *Channel) {
 	channel = new(Channel)
 	channel.Id = id
 	channel.Name = name
-	channel.clients = make(map[uint32]*TlsClient)
+	channel.clients = make(map[uint32]*Client)
 	channel.parentId = ROOT_CHANNEL
 	channel.Position = 0
 	channel.temporary = true
@@ -41,45 +39,49 @@ func NewChannel(id int, name string) (channel *Channel) {
 }
 
 // TODO : need to be run as genserver
-func (channel *Channel)startChannel(){
+func (channel *Channel) startChannel() {
 }
 
 func (channel *Channel) IsEmpty() bool {
 	return (len(channel.clients) == 0)
 }
 
-func (channel *Channel) removeClient(client *TlsClient) {
+func (channel *Channel) removeClient(client *Client) {
 	delete(channel.clients, client.Session())
-	client.channel = nil
+	client.Channel = nil
 }
-func (channel *Channel) addClient(client *TlsClient){
+func (channel *Channel) addClient(client *Client) {
 	channel.clients[client.Session()] = client
 }
 
-func (channel *Channel) ToChannelState() (*mumbleproto.ChannelState) {
-	 channelStateMsg := &mumbleproto.ChannelState{
-		ChannelId: proto.Uint32(uint32(channel.Id)),
-		Parent: proto.Uint32(uint32(channel.parentId)),
-		Name: proto.String(channel.Name),
+func (channel *Channel) toChannelState() *mumbleproto.ChannelState {
+	channelStateMsg := &mumbleproto.ChannelState{
+		ChannelId:   proto.Uint32(uint32(channel.Id)),
+		Parent:      proto.Uint32(uint32(channel.parentId)),
+		Name:        proto.String(channel.Name),
 		Description: proto.String(channel.description),
-		Temporary: proto.Bool(channel.temporary),
-		Position: proto.Int32(int32(channel.Position)),
+		Temporary:   proto.Bool(channel.temporary),
+		Position:    proto.Int32(int32(channel.Position)),
 	}
 	return channelStateMsg
 }
 
-
-func (channel *Channel) sendUserListInChannel(client *TlsClient) {
+func (channel *Channel) SendUserListInChannel(client *Client) {
 	fmt.Println(channel.Name)
 	for _, eachUser := range channel.clients {
-		fmt.Print(eachUser.userName)
+		fmt.Print(eachUser.UserName)
 		/*if reflect.DeepEqual(eachUser, client) {
 			continue
 		}*/
-		fmt.Println("client list: ", client.userName)
-		err := client.sendMessage(eachUser.ToUserState())
+		fmt.Println("client list: ", client.UserName)
+		err := client.SendMessage(eachUser.ToUserState())
 		if err != nil {
 			panic(" Error sending channel User list")
 		}
 	}
+}
+
+//callback
+func (c *Channel) Init() {
+
 }

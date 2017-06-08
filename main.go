@@ -1,19 +1,29 @@
-// @author 허재화 <jhwaheo@smilegate.com>
-// @version 1.0
-// murgo server main
-//
-//
-//
-
-
 package main
 
-import "murgo/server"
+import (
+	"fmt"
+	"murgo/server"
+	"os"
+	"os/signal"
+	"syscall"
+)
 
 func main() {
 
-	supervisor := server.NewSupervisor()
-	go supervisor.StartSupervisor()
-	select {}
+	//start supervisor
+	server.Start()
+
+	c := make(chan os.Signal, 2)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+
+	<-c // main routine wait for C^ interrupt signal
+
+	err := server.Terminate()
+	if err != nil {
+		panic("Error while terminating server")
+	}
+
+	fmt.Println("Murgo server terminated")
+	os.Exit(1)
 
 }

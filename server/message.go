@@ -1,24 +1,24 @@
 package server
 
-import (
-	"net"
-)
-
 type Message struct {
-	buf    []byte
-	kind   uint16
-	client *TlsClient
+	buf         []byte
+	kind        uint16
+	client      *Client
 	testCounter int
 }
 
+/*
 type MurgoMessage struct {
-	kind uint16
-	channelId int
-	client *TlsClient
-	channel *Channel
-	msg interface{}
-	ChannelName string
-	conn *net.Conn
-	castReply chan interface{}
+	FuncName    string
 
+
+	Kind        uint16
+	ChannelId   int
+	Client      *TlsClient
+	Channel     *Channel
+	Msg         interface{}
+	ChannelName string
+	Conn        *net.Conn
+	CastReply   chan interface{}
 }
+*/
