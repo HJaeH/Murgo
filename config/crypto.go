@@ -15,7 +15,7 @@ type CryptState struct {
 
 func (cryptState *CryptState) GenerateKey() error {
 
-	key := make([]byte, 100) // todo : need specified byte size
+	key := make([]byte, 100) // todo : need a specified byte size
 	_, err := io.ReadFull(rand.Reader, key)
 	if err != nil {
 		return err
