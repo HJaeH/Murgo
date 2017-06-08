@@ -1,68 +1,17 @@
-// @author 허재화 <jhwaheo@smilegate.com>
-// @version 1.0
-// murgo message handler
-
 package server
 
 import (
 	"fmt"
-
 	"murgo/pkg/mumbleproto"
+	"murgo/pkg/servermodule"
+	APIkeys "murgo/server/util"
 
 	"github.com/golang/protobuf/proto"
 )
 
+type MessageHandler struct{}
 
-type MessageHandler struct {
-	supervisor *MurgoSupervisor
-
-	Cast chan interface{}
-	Call chan interface{}
-}
-type messageHandling interface{
-
-}
-
-func NewMessageHandler(supervisor *MurgoSupervisor) *MessageHandler {
-
-	messageHandler := new(MessageHandler)
-	messageHandler.supervisor = supervisor
-
-	messageHandler.Cast = make(chan interface{})
-	return messageHandler
-}
-
-func (messageHandler *MessageHandler) startMassageHandler() {
-	 // panic 리턴
-	/*defer func(){
-		if err:= recover(); err!= nil{
-			fmt.Println("Message Handler recovered")
-			messageHandler.startMassageHandler()
-		}
-	}()
-*/
-	fmt.Println("Message Handler stared")
-	for {
-		select {
-		case castData := <-messageHandler.Cast:
-			messageHandler.handleCast(castData)
-
-		}
-	}
-}
-
-func (messageHandler *MessageHandler) handleCast(castData interface{}) {
-	switch castData.(type) {
-	default:
-		panic("Handling cast of unexpected type in message handler")
-	case *Message:
-		msg := castData.(*Message)
-		messageHandler.handleMassage(msg)
-	}
-}
-
-func (messageHandler *MessageHandler) handleMassage(msg *Message) {
-
+func (messageHandler *MessageHandler) HandleMassage(msg *Message) {
 	switch msg.kind {
 	case mumbleproto.MessageAuthenticate:
 		messageHandler.handleAuthenticateMessage(msg)
@@ -72,8 +21,8 @@ func (messageHandler *MessageHandler) handleMassage(msg *Message) {
 		messageHandler.handleChannelRemoveMessage(msg)
 	case mumbleproto.MessageChannelState:
 		messageHandler.handleChannelStateMessage(msg)
-	case mumbleproto.MessageUserState:
-		messageHandler.handleUserStateMessage(msg)
+	/*case mumbleproto.MessageUserState:
+	messageHandler.handleUserStateMessage(msg)*/
 	case mumbleproto.MessageUserRemove:
 		messageHandler.handleUserRemoveMessage(msg)
 	case mumbleproto.MessageBanList:
@@ -102,7 +51,7 @@ func (messageHandler *MessageHandler) handleMassage(msg *Message) {
 }
 
 ////Authenticate message handling
-func (messageHandler *MessageHandler) handleAuthenticateMessage(msg *Message) {
+func (m *MessageHandler) handleAuthenticateMessage(msg *Message) {
 
 	authenticate := &mumbleproto.Authenticate{}
 	err := proto.Unmarshal(msg.buf, authenticate)
@@ -110,7 +59,7 @@ func (messageHandler *MessageHandler) handleAuthenticateMessage(msg *Message) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("Authenticate info:", authenticate)
+	fmt.Println("auth message:", authenticate, "msg id :", msg.testCounter, "from:", msg.client.UserName)
 
 	// crypto setup
 	client := msg.client
@@ -142,18 +91,10 @@ func (messageHandler *MessageHandler) handleAuthenticateMessage(msg *Message) {
 		return
 	}
 	/// send channel state
-	messageHandler.supervisor.channelManager.Cast <- &MurgoMessage{
-		FuncName: "sendChannelList",
-		Kind:   sendChannelList,
-		Client: client,
-	}
+	servermodule.Cast(APIkeys.SendChannelList, client)
 	// enter the root channel as default channel
-	messageHandler.supervisor.channelManager.Cast <- &MurgoMessage{
-		FuncName: "userEnterChannel",
-		Kind:      userEnterChannel,
-		Client:    client,
-		ChannelId: ROOT_CHANNEL,
-	}
+	fmt.Println("==========")
+	servermodule.Cast(APIkeys.EnterChannel, ROOT_CHANNEL, client)
 
 	sync := &mumbleproto.ServerSync{}
 	sync.Session = proto.Uint32(uint32(client.session))
@@ -175,13 +116,14 @@ func (messageHandler *MessageHandler) handleAuthenticateMessage(msg *Message) {
 	}
 }
 
-func (messageHandler *MessageHandler) handlePingMessage(msg *Message) {
+func (m *MessageHandler) handlePingMessage(msg *Message) {
 	ping := &mumbleproto.Ping{}
 	err := proto.Unmarshal(msg.buf, ping)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+	fmt.Println("ping message:", ping, "msg id :", msg.testCounter, "from:", msg.client.UserName)
 
 	//fmt.Println("ping info:", ping, "msg id : ", msg.testCounter)
 	client := msg.client
@@ -197,90 +139,25 @@ func (messageHandler *MessageHandler) handlePingMessage(msg *Message) {
 func (messageHandler *MessageHandler) handleUserStateMessage(msg *Message) {
 
 	// 메시지를 보낸 유저 reset idle -> 이 부분은 통합
-	userstate := &mumbleproto.UserState{}
-	err := proto.Unmarshal(msg.buf, userstate)
+	userState := &mumbleproto.UserState{}
+	err := proto.Unmarshal(msg.buf, userState)
 	if err != nil {
 		//
 		return
 	}
-	fmt.Println("userstate info:", userstate, "msg id :", msg.testCounter, "from:", msg.client.UserName)
+	fmt.Println("userstate info:", userState, "msg id :", msg.testCounter, "from:", msg.client.UserName)
 	//Channel ID 필드 값이 있는 경우
-	if userstate.ChannelId != nil {
-		messageHandler.supervisor.channelManager.Cast <- &MurgoMessage{
-			Kind:      userEnterChannel,
-			ChannelId: int(*userstate.ChannelId),
-			Client:    msg.client, // temp target
-		}
+	if userState.ChannelId != nil {
+		servermodule.Cast(APIkeys.EnterChannel, int(*userState.ChannelId), msg.client)
 	}
 
-
-	clients := messageHandler.supervisor.tlsClients
-	channelManager := messageHandler.supervisor.channelManager
-
-	actor, ok := clients[msg.client.Session()]
-	if !ok {
-		//server.Panic("Client not found in server's client map.")
-		return
-	}
-
-	//actor는 메시지를 보낸 클라이언트
-	//target은 메세지 패킷의 session 값; 메시지의 대상
-
-
-
-	target := actor
-	if userstate.Session != nil {
-		// target -> 메시지의 session에 해당하는 client 메시지의 대상. sender일 수도 있고 아닐 수도 있다
-		target, ok = clients[*userstate.Session]
-		if !ok {
-			fmt.Println("Invalid session in UserState message")
-			return
-		}
-	}
-
-
-
-
-	userstate.Session = proto.Uint32(target.Session())
-	userstate.Actor = proto.Uint32(actor.Session())
-
-
-	tempUserState := &mumbleproto.UserState{}
-	if userstate.Mute != nil {
-		if actor.Session() != target.Session() {
-			//can't change other users mute state
-			//permission denied
-			sendPermissionDenied(actor, mumbleproto.PermissionDenied_Permission)
-		} else {
-			// 변경
-			tempUserState.Mute = userstate.Mute
-		}
-	} else {
-		if actor.Session() != target.Session() {
-			if actor.mute == false {
-
-			}
-		}
-	}
-	newMsg := &mumbleproto.UserState{
-		Deaf:     proto.Bool(false),
-		SelfDeaf: proto.Bool(false),
-		Name:     userstate.Name,
-	}
-
-	if userstate.ChannelId != nil {
-		channelManager.Cast <- &MurgoMessage{
-			Kind:      broadCastChannel,
-			ChannelId: int(*userstate.ChannelId),
-			Msg:       newMsg,
-		}
-	}
+	servermodule.Cast(APIkeys.SetUserOption, userState)
 
 }
 
 //구현된 핸들링 함수
-func (messageHandler *MessageHandler) handleChannelStateMessage(msg *Message) {
-
+func (m *MessageHandler) handleChannelStateMessage(tempMsg interface{}) {
+	msg := tempMsg.(*Message)
 	channelStateMsg := &mumbleproto.ChannelState{}
 	err := proto.Unmarshal(msg.buf, channelStateMsg)
 	if err != nil {
@@ -289,14 +166,10 @@ func (messageHandler *MessageHandler) handleChannelStateMessage(msg *Message) {
 	}
 	fmt.Println("ChannelState info:", channelStateMsg, "from:", msg.client.UserName)
 	if channelStateMsg.ChannelId == nil && channelStateMsg.Name != nil && *channelStateMsg.Temporary == true && *channelStateMsg.Parent == 0 && *channelStateMsg.Position == 0 {
-		messageHandler.supervisor.channelManager.Cast <- &MurgoMessage{
-			Kind:        addChannel,
-			ChannelName: *channelStateMsg.Name,
-			Client:      msg.client,
-		}
+		servermodule.Call(APIkeys.AddChannel, *channelStateMsg.Name, msg.client)
 	}
 }
-func (messageHandler *MessageHandler) handleUserStatsMessage(msg *Message) {
+func (m *MessageHandler) handleUserStatsMessage(msg *Message) {
 	userStats := &mumbleproto.UserStats{}
 	client := msg.client
 	err := proto.Unmarshal(msg.buf, userStats)
@@ -304,7 +177,7 @@ func (messageHandler *MessageHandler) handleUserStatsMessage(msg *Message) {
 		fmt.Println(err)
 		return
 	}
-	//fmt.Println("userstats info:", userStats, "from:", msg.client.userName)
+	fmt.Println("userstats info:", userStats, "from:", msg.client.UserName)
 	newUserStatsMsg := &mumbleproto.UserStats{
 		TcpPingAvg: proto.Float32(client.tcpPingAvg),
 		TcpPingVar: proto.Float32(client.tcpPingVar),
@@ -329,7 +202,7 @@ func (messageHandler *MessageHandler) handleUserRemoveMessage(msg *Message) {
 }
 
 // protocol handling dummy for banlist message
-func (messageHandler *MessageHandler) handleBanListMessage(msg *Message) {
+func (m *MessageHandler) handleBanListMessage(msg *Message) {
 
 	msgProto := &mumbleproto.BanList{}
 	err := proto.Unmarshal(msg.buf, msgProto)
@@ -341,7 +214,7 @@ func (messageHandler *MessageHandler) handleBanListMessage(msg *Message) {
 }
 
 //TODO : deal with sending text message
-func (messageHandler *MessageHandler) handleTextMessage(msg *Message) {
+func (m *MessageHandler) handleTextMessage(msg *Message) {
 	textMsg := &mumbleproto.TextMessage{}
 	err := proto.Unmarshal(msg.buf, textMsg)
 	if err != nil {
@@ -352,29 +225,23 @@ func (messageHandler *MessageHandler) handleTextMessage(msg *Message) {
 
 	if textMsg.ChannelId != nil {
 		newMsg := mumbleproto.TextMessage{
-			Actor:textMsg.Actor,
-			Session:textMsg.Session,
+			Actor:     textMsg.Actor,
+			Session:   textMsg.Session,
 			ChannelId: textMsg.ChannelId,
-			Message: textMsg.Message,
+			Message:   textMsg.Message,
 		}
-		messageHandler.supervisor.channelManager.Cast <- &MurgoMessage{
-			Kind:broadCastChannel,
-			Msg:newMsg,
-			ChannelId:int(textMsg.ChannelId[0]),
-		}
+
+		servermodule.Cast(APIkeys.BroadcastChannel, newMsg, int(textMsg.ChannelId[0]))
+
 	} else if textMsg.Session != nil {
 
 	}
-
-
-
-
 
 }
 
 // protocol handling dummy for Aclmessage
 
-func (messageHandler *MessageHandler) handleAclMessage(msg *Message) {
+func (m *MessageHandler) handleAclMessage(msg *Message) {
 	msgProto := &mumbleproto.ACL{}
 	err := proto.Unmarshal(msg.buf, msgProto)
 	if err != nil {
@@ -387,7 +254,7 @@ func (messageHandler *MessageHandler) handleAclMessage(msg *Message) {
 
 // protocol handling dummy for QueryUSers
 
-func (messageHandler *MessageHandler) handleQueryUsers(msg *Message) {
+func (m *MessageHandler) handleQueryUsers(msg *Message) {
 	msgProto := &mumbleproto.QueryUsers{}
 	err := proto.Unmarshal(msg.buf, msgProto)
 	if err != nil {
@@ -399,7 +266,7 @@ func (messageHandler *MessageHandler) handleQueryUsers(msg *Message) {
 }
 
 // protocol handling dummy for CtyptSetup
-func (messageHandler *MessageHandler) handleCryptSetup(msg *Message) {
+func (m *MessageHandler) handleCryptSetup(msg *Message) {
 	msgProto := &mumbleproto.CryptSetup{}
 	err := proto.Unmarshal(msg.buf, msgProto)
 	if err != nil {
@@ -412,7 +279,7 @@ func (messageHandler *MessageHandler) handleCryptSetup(msg *Message) {
 
 // protocol handling dummy for UserList
 
-func (messageHandler *MessageHandler) handleUserList(msg *Message) {
+func (m *MessageHandler) handleUserList(msg *Message) {
 	msgProto := &mumbleproto.UserList{}
 	err := proto.Unmarshal(msg.buf, msgProto)
 	if err != nil {
@@ -425,7 +292,7 @@ func (messageHandler *MessageHandler) handleUserList(msg *Message) {
 
 // protocol handling dummy for Voicetarget
 
-func (messageHandler *MessageHandler) handleVoiceTarget(msg *Message) {
+func (m *MessageHandler) handleVoiceTarget(msg *Message) {
 	msgProto := &mumbleproto.VoiceTarget{}
 	err := proto.Unmarshal(msg.buf, msgProto)
 	if err != nil {
@@ -437,7 +304,7 @@ func (messageHandler *MessageHandler) handleVoiceTarget(msg *Message) {
 }
 
 // protocol handling dummy for PermissionQuery
-func (messageHandler *MessageHandler) handlePermissionQuery(msg *Message) {
+func (m *MessageHandler) handlePermissionQuery(msg *Message) {
 	msgProto := &mumbleproto.PermissionQuery{}
 	err := proto.Unmarshal(msg.buf, msgProto)
 	if err != nil {
@@ -449,7 +316,7 @@ func (messageHandler *MessageHandler) handlePermissionQuery(msg *Message) {
 }
 
 // protocol handling dummy for requestBlob
-func (messageHandler *MessageHandler) handleRequestBlob(msg *Message) {
+func (m *MessageHandler) handleRequestBlob(msg *Message) {
 	msgProto := &mumbleproto.RequestBlob{}
 	err := proto.Unmarshal(msg.buf, msgProto)
 	if err != nil {
@@ -460,7 +327,7 @@ func (messageHandler *MessageHandler) handleRequestBlob(msg *Message) {
 
 }
 
-func (messageHandler *MessageHandler) handleChannelRemoveMessage(msg *Message) {
+func (m *MessageHandler) handleChannelRemoveMessage(msg *Message) {
 	msgProto := &mumbleproto.RequestBlob{}
 	err := proto.Unmarshal(msg.buf, msgProto)
 	if err != nil {
@@ -472,7 +339,7 @@ func (messageHandler *MessageHandler) handleChannelRemoveMessage(msg *Message) {
 
 // TODO : permission 처리 나누어서 구현
 // Send message when permission denied
-func sendPermissionDenied(client *TlsClient, denyType mumbleproto.PermissionDenied_DenyType) {
+func sendPermissionDenied(client *Client, denyType mumbleproto.PermissionDenied_DenyType) {
 	permissionDeniedMsg := &mumbleproto.PermissionDenied{
 		Session: proto.Uint32(client.Session()),
 		Type:    &denyType,
@@ -484,5 +351,9 @@ func sendPermissionDenied(client *TlsClient, denyType mumbleproto.PermissionDeni
 		return
 	}
 
+}
+
+func (m *MessageHandler) Init() {
+	servermodule.RegisterAPI((*MessageHandler).HandleMassage, APIkeys.HandleMessage)
 
 }
