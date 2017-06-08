@@ -1,14 +1,13 @@
 package config
 
 import (
-	"io"
 	"crypto/rand"
+	"io"
 )
-
 
 //import "io"
 
-type CryptState struct{
+type CryptState struct {
 	key       []byte
 	encryptIV []byte
 	decryptIV []byte
@@ -16,7 +15,7 @@ type CryptState struct{
 
 func (cryptState *CryptState) GenerateKey() error {
 
-	key := make([]byte, 100)// todo : need a specified byte size
+	key := make([]byte, 100) // todo : need a specified byte size
 	_, err := io.ReadFull(rand.Reader, key)
 	if err != nil {
 		return err
@@ -37,15 +36,15 @@ func (cryptState *CryptState) GenerateKey() error {
 	return nil
 }
 
-func (cryptState *CryptState)Key() ([]byte){
+func (cryptState *CryptState) Key() []byte {
 	return cryptState.key
 }
 
-func (cryptState *CryptState)EncryptIV()([]byte){
+func (cryptState *CryptState) EncryptIV() []byte {
 	return cryptState.encryptIV
 }
 
-func (cryptState *CryptState)DecryptIV()([]byte){
+func (cryptState *CryptState) DecryptIV() []byte {
 	return cryptState.decryptIV
 }
 
