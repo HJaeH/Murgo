@@ -2,7 +2,6 @@ package server
 
 import (
 	"errors"
-	"fmt"
 	"murgo/pkg/servermodule"
 )
 
@@ -20,10 +19,6 @@ func (supervisor *MurgoSupervisor) Terminate() error {
 func Terminate() error {
 	err := errors.New("terminate")
 	return err
-}
-
-func (m *MurgoSupervisor) Temp(a int) {
-	fmt.Println(a)
 }
 
 //callback

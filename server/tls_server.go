@@ -84,8 +84,7 @@ func (ts *TlsServer) terminate() {
 }
 
 func (t *TlsServer) Receive(client *Client) {
-	// todo : goroutine is to be blocked here,
-	// todo : check the trade offs of keeping one io reader and this
+
 	for {
 		msg, err := client.readProtoMessage()
 		if err != nil {
@@ -99,6 +98,21 @@ func (t *TlsServer) Receive(client *Client) {
 			}
 		}
 		servermodule.Cast(APIkeys.HandleMessage, msg)
-		/*servermodule.Cast(APIkeys.Receive, client)*/
 	}
+	/*
+		// todo : 여기서 고루틴이 블락 되기 때문에, 여전히 세션 수 만큼 고루틴 필요함
+		// todo  : 고루틴 한개에서 네트워크 패킷을 다 받도록 했을 떄 고려해보자
+		msg, err := client.readProtoMessage()
+		if err != nil {
+			if err != nil {
+				if err == io.EOF {
+					client.Disconnect()
+				} else {
+					//client.Panicf("%v", err)
+				}
+				return
+			}
+		}
+		servermodule.Cast(APIkeys.HandleMessage, msg)
+		servermodule.Cast(APIkeys.Receive, client)*/
 }

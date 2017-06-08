@@ -68,6 +68,7 @@ func (s *Sup) supervisorLoop() {
 		case msg := <-s.callChan:
 			//todo : call return 구현, 동기 코드 구현
 			go s.handleCall(msg)
+
 		case msg := <-s.castChan:
 			/*if msg.wg != nil {
 				msg.wg.Add(1)
@@ -82,20 +83,32 @@ func (s *Sup) supervisorLoop() {
 }
 
 func (s *Sup) handleCast(msg *CastMessage) {
-	if msg.args == nil {
+	fmt.Println("Cast API", msg.apiKey)
+
+	/*if msg.args == nil {
 		msg.apiVal.Call([]reflect.Value{})
 	} else {
-		doHandleCast(msg.apiVal, msg.args...)
+		doCall(msg.apiVal, msg.args...)
+	}*/
+	select {
+	//check whether this module is available now or not
+	case msg.syncChan <- true:
+		doCall(msg.apiVal, msg.args...)
+	default:
+		fmt.Println("buffer is full")
+		cast(msg.apiKey, msg.args...)
 	}
 
 	defer func() {
 		<-msg.syncChan
-		//msg.wg.Done()
+		<-msg.buf
+
 	}()
 
 }
 
-func doHandleCast(val reflect.Value, args ...interface{}) {
+func doCall(val reflect.Value, args ...interface{}) {
+
 	if args == nil {
 		val.Call([]reflect.Value{})
 	} else {
@@ -109,7 +122,7 @@ func doHandleCast(val reflect.Value, args ...interface{}) {
 }
 
 func (s *Sup) handleCall(msg *CallMessage) {
-	if msg.args == nil {
+	/*if msg.args == nil {
 		msg.apiVal.Call([]reflect.Value{})
 	} else {
 		inputs := make([]reflect.Value, len(msg.args))
@@ -117,15 +130,26 @@ func (s *Sup) handleCall(msg *CallMessage) {
 			inputs[i] = reflect.ValueOf(msg.args[i])
 
 		}
+
 		msg.apiVal.Call(inputs)
+	}*/
+	select {
+	//check whether this module is available now or not
+	case msg.syncChan <- true:
+		//execute the request
+		doCall(msg.apiVal, msg.args...)
+	default:
+		//call again
+		call(msg.apiKey, msg.args)
 	}
+
 	defer func() {
 		<-msg.syncChan
-	}()
+		<-msg.buf
+		//cast sync
+		msg.reply <- true
 
-	/*returnChan <- &CallReply{
-		//sender: ,
-	}*/ // todo : call return 작업중
+	}()
 }
 
 func restart(module func()) {

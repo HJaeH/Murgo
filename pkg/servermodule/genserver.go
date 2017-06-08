@@ -6,26 +6,25 @@ import (
 )
 
 const (
-	routeBufferPerModule = 10
+	single     = 1
+	multi      = 5
+	defaultBuf = 10
 )
-
-//todo : req type 변경시에 타입 지정해서 사용
-//type request string
 
 type GenCallback interface {
 	Init()
-	//Remove()
-	//HandleCast(string, ...interface{})
-	//HandleCall(string, ...interface{})
 }
 
 type GenServer struct {
+	mid string
 	sup *Sup
 	val reflect.Value
 
 	apis map[int]*API
 	sync chan bool
+	buf  chan bool
 
+	//todo : 코드 개선
 	wg *sync.WaitGroup
 }
 
@@ -44,6 +43,7 @@ type CastMessage struct {
 	//by supervisor to call api
 	syncChan chan bool
 	wg       *sync.WaitGroup
+	buf      chan bool
 }
 
 type CallMessage struct {
@@ -54,8 +54,8 @@ type CallMessage struct {
 	//by supervisor to call api
 	syncChan chan bool
 	apiVal   reflect.Value
-
-	reply chan *CallReply
+	buf      chan bool
+	reply    chan bool
 }
 
 type CallReply struct {
@@ -138,18 +138,20 @@ func getMid(mod interface{}) string {
 
 func (g *GenServer) init(smod SupCallback, mod GenCallback, sg bool) {
 	//todo mid 추가 여부
-	//mid := getMid(mod)
+	mid := getMid(mod)
 	smid := getMid(smod)
+
 	parent := router.supervisors[smid]
 	g.wg = new(sync.WaitGroup)
-	g.sync = make(chan bool, routeBufferPerModule)
-	/*if sg {
-		g.sync = make(chan bool, routeBufferPerModule)
+	//g.sync = make(chan bool, routeBufferPerModule)
+	g.buf = make(chan bool, defaultBuf)
+	if sg {
+		g.sync = make(chan bool, single)
 	} else {
-		g.sync = make(chan bool, routeBufferPerModule)
-	}*/
+		g.sync = make(chan bool, multi)
+	}
 	g.apis = make(map[int]*API)
-
+	g.mid = mid
 	g.sup = parent
 	g.val = reflect.ValueOf(mod)
 }

@@ -13,6 +13,7 @@ const (
 	//101 ~
 	HandleIncomingClient = SessionManager + iota + 1
 	BroadcastMessage
+	SetUserOption
 )
 
 const (

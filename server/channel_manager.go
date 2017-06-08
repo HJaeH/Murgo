@@ -44,8 +44,8 @@ func (c *ChannelManager) init() {
 	c.nextChannelID = ROOT_CHANNEL + 1
 }
 
-func (channelManager *ChannelManager) AddChannel(channelName string, client *Client) {
-	for _, eachChannel := range channelManager.channelList {
+func (c *ChannelManager) AddChannel(channelName string, client *Client) {
+	for _, eachChannel := range c.channelList {
 		if eachChannel.Name == channelName {
 			//todo : client object 없에는 과정
 			//sendPermissionDenied(client, mumbleproto.PermissionDenied_ChannelName)
@@ -54,31 +54,31 @@ func (channelManager *ChannelManager) AddChannel(channelName string, client *Cli
 		}
 	}
 	// create new channel
-	channel := NewChannel(channelManager.nextChannelID, channelName)
-	channelManager.nextChannelID++
-	channelManager.channelList[channel.Id] = channel
+	channel := NewChannel(c.nextChannelID, channelName)
+	c.nextChannelID++
+	c.channelList[channel.Id] = channel
 
 	//let all session know the created channel
 	channelStateMsg := channel.toChannelState()
 
 	servermodule.Cast(APIkeys.BroadcastMessage, channelStateMsg)
 	//let the channel creator enter the channel
-	channelManager.EnterChannel(channel.Id, client)
+	c.EnterChannel(channel.Id, client)
 
 }
 
-func (channelManager *ChannelManager) RootChannel() *Channel {
-	return channelManager.channelList[ROOT_CHANNEL]
+func (c *ChannelManager) RootChannel() *Channel {
+	return c.channelList[ROOT_CHANNEL]
 }
 
-func (channelManager *ChannelManager) exitChannel(client *Client, channel *Channel) {
+func (c *ChannelManager) exitChannel(client *Client, channel *Channel) {
 
 }
 
 //broadcast a msg to all users in a channel
 
-func (channelManager *ChannelManager) BroadCastChannel(channelId int, msg interface{}) {
-	channel, err := channelManager.channel(channelId)
+func (c *ChannelManager) BroadCastChannel(channelId int, msg interface{}) {
+	channel, err := c.channel(channelId)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -92,7 +92,7 @@ func (channelManager *ChannelManager) broadCastChannelWithoutMe(channelId int, m
 	if err != nil {
 		fmt.Println(err)
 	}
-	fmt.Println(channel.clients)
+	//fmt.Println(channel.clients)
 	for _, eachClient := range channel.clients {
 		if reflect.DeepEqual(client, eachClient) {
 			continue
@@ -101,25 +101,25 @@ func (channelManager *ChannelManager) broadCastChannelWithoutMe(channelId int, m
 	}
 }
 
-func (channelManager *ChannelManager) channel(channelId int) (*Channel, error) {
-	if channel, ok := channelManager.channelList[channelId]; ok {
+func (c *ChannelManager) channel(channelId int) (*Channel, error) {
+	if channel, ok := c.channelList[channelId]; ok {
 		return channel, nil
 	}
 
 	return nil, errors.New("Channel ID in invalid in channel list")
 }
 
-func (channelManager *ChannelManager) SendChannelList(client *Client) {
-	fmt.Println(len(channelManager.channelList))
-	for _, eachChannel := range channelManager.channelList {
+func (c *ChannelManager) SendChannelList(client *Client) {
+	//fmt.Println(len(c.channelList))
+	for _, eachChannel := range c.channelList {
 
 		client.SendMessage(eachChannel.toChannelState())
 	}
 }
 
-func (channelManager *ChannelManager) EnterChannel(channelId int, client *Client) {
-
-	newChannel, err := channelManager.channel(channelId)
+func (c *ChannelManager) EnterChannel(channelId int, client *Client) {
+	fmt.Println("----------")
+	newChannel, err := c.channel(channelId)
 	//fmt.Println(client.UserName, " will enter ", newChannel.Name)
 	if err != nil {
 		panic("Channel Id doesn't exist")
@@ -133,7 +133,7 @@ func (channelManager *ChannelManager) EnterChannel(channelId int, client *Client
 	if oldChannel != nil {
 		oldChannel.removeClient(client)
 		if oldChannel.IsEmpty() {
-			channelManager.removeChannel(oldChannel)
+			c.removeChannel(oldChannel)
 			oldChannel = nil
 		}
 	}
@@ -144,13 +144,13 @@ func (channelManager *ChannelManager) EnterChannel(channelId int, client *Client
 
 	if oldChannel != nil && oldChannel.Id != ROOT_CHANNEL {
 		//이전 채널에 떠났음을 알림
-		channelManager.broadCastChannelWithoutMe(oldChannel.Id, userState, client)
+		c.broadCastChannelWithoutMe(oldChannel.Id, userState, client)
 	}
 	// 변한 상태를 클라이언트에게 알림
 
 	if newChannel.Id != ROOT_CHANNEL {
 		//새 채널입장을 채널 유저들에게 알림
-		channelManager.broadCastChannelWithoutMe(newChannel.Id, userState, client)
+		c.broadCastChannelWithoutMe(newChannel.Id, userState, client)
 		//채널에 있는 유저들을 입장하는 유저에게 알림
 		newChannel.SendUserListInChannel(client)
 		/*	for _, users := range newChannel.clients {
@@ -163,7 +163,7 @@ func (channelManager *ChannelManager) EnterChannel(channelId int, client *Client
 	}
 
 	//for test
-	for _, eachChannel := range channelManager.channelList {
+	for _, eachChannel := range c.channelList {
 		fmt.Print(eachChannel.Name, ": ")
 		for _, eachUser := range eachChannel.clients {
 			fmt.Print(eachUser.UserName, ", ")
@@ -172,7 +172,7 @@ func (channelManager *ChannelManager) EnterChannel(channelId int, client *Client
 	}
 }
 
-func (channelManager *ChannelManager) removeChannel(tempChannel interface{}) {
+func (c *ChannelManager) removeChannel(tempChannel interface{}) {
 	channel := tempChannel.(*Channel)
 	// Can't remove root
 	if channel.Id == ROOT_CHANNEL {
@@ -181,22 +181,21 @@ func (channelManager *ChannelManager) removeChannel(tempChannel interface{}) {
 
 	// Remove all clients in the channel to root
 	for _, client := range channel.clients {
-
 		userStateMsg := &mumbleproto.UserState{}
 		userStateMsg.Session = proto.Uint32(client.Session())
 		userStateMsg.ChannelId = proto.Uint32(uint32(ROOT_CHANNEL))
-		channelManager.EnterChannel(ROOT_CHANNEL, client)
+		c.EnterChannel(ROOT_CHANNEL, client)
 
 		//channelManager.Call(channelManager.supervisor.sessionManager)
 		servermodule.Cast(APIkeys.BroadcastMessage, userStateMsg)
 	}
 
 	// Remove the channel itself
-	rootChannel, err := channelManager.channel(ROOT_CHANNEL)
+	rootChannel, err := c.channel(ROOT_CHANNEL)
 	if err != nil {
 		panic("Root doesn't exist")
 	}
-	delete(channelManager.channelList, channel.Id)
+	delete(c.channelList, channel.Id)
 	delete(rootChannel.children, channel.Id)
 
 	channelRemoveMsg := &mumbleproto.ChannelRemove{
@@ -205,9 +204,9 @@ func (channelManager *ChannelManager) removeChannel(tempChannel interface{}) {
 	servermodule.Cast(APIkeys.BroadcastMessage, channelRemoveMsg)
 }
 
-func (channelManager *ChannelManager) printChannels() {
+func (c *ChannelManager) printChannels() {
 	fmt.Println("channel list : ")
-	for _, channel := range channelManager.channelList {
+	for _, channel := range c.channelList {
 		fmt.Print(channel.Name, ", ")
 	}
 	fmt.Println()

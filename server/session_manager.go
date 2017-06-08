@@ -28,6 +28,8 @@ func (s *SessionManager) getClientList() map[uint32]*Client {
 func (s *SessionManager) Init() {
 	servermodule.RegisterAPI((*SessionManager).HandleIncomingClient, APIkeys.HandleIncomingClient)
 	servermodule.RegisterAPI((*SessionManager).BroadcastMessage, APIkeys.BroadcastMessage)
+	servermodule.RegisterAPI((*SessionManager).SetUserOption, APIkeys.SetUserOption)
+
 	s.sessionPool = sessionpool.New()
 	s.clientList = make(map[uint32]*Client)
 }
@@ -69,6 +71,59 @@ func (s *SessionManager) BroadcastMessage(msg interface{}) {
 			continue
 		}*/
 		eachClient.SendMessage(msg)
+	}
+}
+
+func (s *SessionManager) SetUserOption(userState *mumbleproto.UserState) {
+
+	actor, ok := s.clientList[*userState.Actor]
+	if !ok {
+		//server.Panic("Client not found in server's client map.")
+		return
+	}
+
+	//actor는 메시지를 보낸 클라이언트
+	//target은 메세지 패킷의 session 값; 메시지의 대상
+
+	target := actor
+	if userState.Session != nil {
+		// target -> 메시지의 session에 해당하는 client 메시지의 대상. sender일 수도 있고 아닐 수도 있다
+		target, ok = s.clientList[*userState.Session]
+		if !ok {
+			fmt.Println("Invalid session in UserState message")
+			return
+		}
+	}
+
+	userState.Session = proto.Uint32(target.Session())
+	userState.Actor = proto.Uint32(actor.Session())
+
+	tempUserState := &mumbleproto.UserState{}
+	if userState.Mute != nil {
+		if actor.Session() != target.Session() {
+			//can't change other users mute state
+			//permission denied
+			sendPermissionDenied(actor, mumbleproto.PermissionDenied_Permission)
+		} else {
+			// 변경
+			tempUserState.Mute = userState.Mute
+		}
+	} else {
+		if actor.Session() != target.Session() {
+			if actor.mute == false {
+
+			}
+		}
+	}
+
+	newMsg := &mumbleproto.UserState{
+		Deaf:     proto.Bool(false),
+		SelfDeaf: proto.Bool(false),
+		Name:     userState.Name,
+	}
+
+	if userState.ChannelId != nil {
+		servermodule.Cast(APIkeys.BroadcastChannel, int(*userState.ChannelId), newMsg)
 	}
 }
 
