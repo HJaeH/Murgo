@@ -10,18 +10,24 @@ import (
 
 	"murgo/config"
 	"murgo/pkg/mumbleproto"
+	APIkeys "murgo/server/util"
+
+	"time"
+
+	"murgo/pkg/servermodule"
+
+	"fmt"
 
 	"github.com/golang/protobuf/proto"
 )
 
 type Client struct {
-	// 유저가 접속중인 channel
 	Channel *Channel
 	conn    *net.Conn
 	session uint32
 
 	UserName string
-	userId   int
+	userId   uint32
 	reader   *bufio.Reader
 
 	tcpaddr  *net.TCPAddr
@@ -47,35 +53,89 @@ type Client struct {
 	cryptState *config.CryptState
 
 	//client connection state
-	state int
+	state        int
+	disconnected bool
 
+	//version
+	version uint32
 	//for test
 	testCounter int
 }
 
 // called at session manager
 //func NewTlsClient(conn *net.Conn, session uint32, supervisor *MurgoSupervisor) (*TlsClient){
-func NewTlsClient(conn *net.Conn, session uint32) *Client {
+func newClient(conn *net.Conn, session uint32) *Client {
 	//create new object
-	tlsClient := new(Client)
-	tlsClient.cryptState = new(config.CryptState)
+	client := new(Client)
+	client.cryptState = new(config.CryptState)
+	client.userId = session
 
 	//tlsClient.MurgoSupervisor = supervisor
-	tlsClient.bandWidth = NewBandWidth()
-	tlsClient.conn = conn
-	tlsClient.session = session
-	tlsClient.reader = bufio.NewReader(*tlsClient.conn)
+	client.bandWidth = NewBandWidth()
+	client.conn = conn
+	client.session = session
+	client.reader = bufio.NewReader(*client.conn)
 
-	tlsClient.testCounter = 0
+	client.testCounter = 0
 
 	// 기본으로 루트채널에 할당
-	tlsClient.Channel = nil
-	return tlsClient
+	client.Channel = nil
+	return client
 }
 
 //send msg to client
+
 func (c *Client) SendMessage(msg interface{}) error {
 
+	buf := new(bytes.Buffer)
+	var (
+		kind    uint16
+		msgData []byte
+		err     error
+	)
+
+	kind = mumbleproto.MessageType(msg)
+	if kind == mumbleproto.MessageUDPTunnel {
+		msgData = msg.([]byte)
+		fmt.Println("-----")
+	} else {
+		protoMsg, ok := (msg).(proto.Message)
+		if !ok {
+			return errors.New("client: exepcted a proto.Message")
+		}
+		msgData, err = proto.Marshal(protoMsg)
+		if err != nil {
+			return err
+		}
+	}
+	err = binary.Write(buf, binary.BigEndian, kind)
+	if err != nil {
+		return err
+	}
+	err = binary.Write(buf, binary.BigEndian, uint32(len(msgData)))
+	if err != nil {
+		return err
+	}
+	_, err = buf.Write(msgData)
+	if err != nil {
+		return err
+	}
+	//mutex.Lock()
+	_, err = (*c.conn).Write(buf.Bytes())
+	if err != nil {
+		return err
+	}
+	//mutex.Unlock()
+
+	return nil
+}
+
+//todo : write시에 패킷 loss발생 해결 위함
+func (c *Client) SendMessage1(msg interface{}) error {
+
+	//userState := msg.(*mumbleproto.UserState)
+	//fmt.Println("send user msg !! userstate info:", userState, "1!!")
+	time.Sleep(100 * time.Millisecond)
 	buf := new(bytes.Buffer)
 	var (
 		kind    uint16
@@ -109,10 +169,10 @@ func (c *Client) SendMessage(msg interface{}) error {
 	if err != nil {
 		return err
 	}
-
 	_, err = (*c.conn).Write(buf.Bytes())
 	if err != nil {
 		return err
+
 	}
 
 	return nil
@@ -143,27 +203,29 @@ func (c *Client) readProtoMessage() (msg *Message, err error) {
 	if err != nil {
 		return
 	}
-	c.testCounter++
-
 	msg = &Message{
-		buf:         buf,
-		kind:        kind,
-		client:      c,
-		testCounter: c.testCounter,
+		buf:    buf,
+		kind:   kind,
+		client: c,
 	}
 	return msg, err
 }
 
 func (c *Client) Disconnect() {
-
+	if !c.disconnected {
+		c.disconnected = true
+		servermodule.Call(APIkeys.RemoveClient, c)
+		(*c.conn).Close()
+	}
 }
-func (c *Client) ToUserState() *mumbleproto.UserState {
+
+func (c *Client) toUserState() *mumbleproto.UserState {
 
 	userStateMsg := &mumbleproto.UserState{
 		Session:   proto.Uint32(c.session),
 		Name:      proto.String(c.UserName),
 		UserId:    proto.Uint32(uint32(c.userId)),
-		ChannelId: proto.Uint32(uint32(c.Channel.Id)),
+		ChannelId: proto.Uint32(c.Channel.Id),
 		Mute:      proto.Bool(c.mute),
 		Deaf:      proto.Bool(c.deaf),
 		Suppress:  proto.Bool(c.suppress),
@@ -175,4 +237,20 @@ func (c *Client) ToUserState() *mumbleproto.UserState {
 
 func (c *Client) Session() uint32 {
 	return c.session
+}
+func (c *Client) Receive() {
+	for {
+		msg, err := c.readProtoMessage()
+		if err != nil {
+			if err != nil {
+				if err == io.EOF {
+					c.Disconnect()
+				} else {
+					panic(err)
+				}
+				return
+			}
+		}
+		servermodule.Cast(APIkeys.HandleMessage, msg)
+	}
 }

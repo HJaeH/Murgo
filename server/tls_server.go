@@ -6,7 +6,9 @@ import (
 	"crypto/tls"
 	"io"
 	"murgo/config"
+	"murgo/pkg/mumbleproto"
 	"murgo/pkg/servermodule"
+
 	APIkeys "murgo/server/util"
 	"net"
 )
@@ -51,32 +53,6 @@ func (tlsServer *TlsServer) Init() {
 	servermodule.Cast(APIkeys.Accept)
 }
 
-/*
-func (ts *TlsServer) HandleCast(request string, args ...interface{}) {
-
-	if args == nil {
-		reflect.ValueOf(ts).MethodByName(request).Call([]reflect.Value{})
-	} else {
-		inputs := make([]reflect.Value, len(args))
-		for i, _ := range args {
-			inputs[i] = reflect.ValueOf(args[i])
-		}
-		reflect.ValueOf(ts).MethodByName(request).Call(inputs)
-	}
-}
-
-func (ts *TlsServer) HandleCall(request string, args ...interface{}) {
-	if args == nil {
-		reflect.ValueOf(ts).MethodByName(request).Call([]reflect.Value{})
-	} else {
-		inputs := make([]reflect.Value, len(args))
-		for i, _ := range args {
-			inputs[i] = reflect.ValueOf(args[i])
-		}
-		reflect.ValueOf(ts).MethodByName(request).Call(inputs)
-	}
-}*/
-
 func (ts *TlsServer) terminate() {
 	ts.ln.Close()
 	//todo : 메모리 회수 및 나머지 작업
@@ -86,33 +62,31 @@ func (ts *TlsServer) terminate() {
 func (t *TlsServer) Receive(client *Client) {
 
 	for {
+		//todo : 클라이언트가 사라지는 시점 파악
 		msg, err := client.readProtoMessage()
+		if (*client.conn) == nil {
+			fmt.Println("-=====-=-=-=")
+		}
 		if err != nil {
 			if err != nil {
 				if err == io.EOF {
 					client.Disconnect()
 				} else {
-					//client.Panicf("%v", err)
+					panic(err)
 				}
 				return
 			}
 		}
-		servermodule.Cast(APIkeys.HandleMessage, msg)
+		if msg.kind == mumbleproto.MessageUDPTunnel {
+			//Voice client also check this, just to be sure.
+			if client.Channel.Id == ROOT_CHANNEL {
+				continue
+			} else {
+
+			}
+		} else {
+			servermodule.Cast(APIkeys.HandleMessage, msg)
+		}
+
 	}
-	/*
-		// todo : 여기서 고루틴이 블락 되기 때문에, 여전히 세션 수 만큼 고루틴 필요함
-		// todo  : 고루틴 한개에서 네트워크 패킷을 다 받도록 했을 떄 고려해보자
-		msg, err := client.readProtoMessage()
-		if err != nil {
-			if err != nil {
-				if err == io.EOF {
-					client.Disconnect()
-				} else {
-					//client.Panicf("%v", err)
-				}
-				return
-			}
-		}
-		servermodule.Cast(APIkeys.HandleMessage, msg)
-		servermodule.Cast(APIkeys.Receive, client)*/
 }

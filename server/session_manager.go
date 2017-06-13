@@ -11,17 +11,37 @@ import (
 
 	"net"
 
+	"io"
+
 	"github.com/golang/protobuf/proto"
 )
 
 type SessionManager struct {
-	clientList   map[uint32]*Client
-	sessionPool  *sessionpool.SessionPool
-	clientIdList map[uint32]*Client
+	clientList  map[uint32]*Client
+	sessionPool *sessionpool.SessionPool
 }
 
 func (s *SessionManager) getClientList() map[uint32]*Client {
 	return s.clientList
+}
+func (s *SessionManager) getClient(session uint32) *Client {
+	client, ok := s.clientList[session]
+	if ok != true {
+		panic("invalid session")
+	}
+	return client
+}
+
+func (s *SessionManager) RemoveClient(client *Client) {
+	//delete from session list
+	delete(s.clientList, client.session)
+	//delete from channel
+	channel := client.Channel
+	if channel != nil {
+		channel.removeClient(client)
+	}
+	client.SendMessage(client.toUserState())
+	s.sessionPool.Reclaim(client.Session())
 }
 
 //Callbacks
@@ -29,6 +49,9 @@ func (s *SessionManager) Init() {
 	servermodule.RegisterAPI((*SessionManager).HandleIncomingClient, APIkeys.HandleIncomingClient)
 	servermodule.RegisterAPI((*SessionManager).BroadcastMessage, APIkeys.BroadcastMessage)
 	servermodule.RegisterAPI((*SessionManager).SetUserOption, APIkeys.SetUserOption)
+	servermodule.RegisterAPI((*SessionManager).RemoveClient, APIkeys.RemoveClient)
+	servermodule.RegisterAPI((*SessionManager).SendMessages, APIkeys.SendMessages)
+	servermodule.RegisterAPI((*SessionManager).isValidName, APIkeys.CheckUserDuplication)
 
 	s.sessionPool = sessionpool.New()
 	s.clientList = make(map[uint32]*Client)
@@ -36,15 +59,10 @@ func (s *SessionManager) Init() {
 
 //// APIs
 func (s *SessionManager) HandleIncomingClient(conn net.Conn) {
-	//conn = (*net.Conn)conn
-	//var conn = new(nest.Conn)
-	//init tls client
 
-	session := s.sessionPool.Get()
-	//client := NewTlsClient(conn, session, sessionManager.supervisor)
-	/*a :=
-	a = conn.*/
-	client := NewTlsClient(&conn, session)
+	session := s.sessionPool.Get() - 1
+	client := newClient(&conn, session)
+	fmt.Println(session, "is connected")
 	s.clientList[session] = client
 	// send version information
 	version := &mumbleproto.Version{
@@ -56,13 +74,48 @@ func (s *SessionManager) HandleIncomingClient(conn net.Conn) {
 	if err != nil {
 		fmt.Println("Error sending message to client")
 	}
-	//create client message receive loop as gen server
-	// TODO : the start time need to be pushed back - after check duplication
-	// TODO : but the work is conducted in authenticate which is running in message accepting loop
-	//sessionManager.supervisor.startGenServer(client.recvLoop)
-	servermodule.Cast(APIkeys.Receive, client)
-	//servermodule.Supervisor.StartGenServer()
 
+	fmt.Println("====")
+	msg, err := client.readProtoMessage()
+	fmt.Println("====")
+	if err != nil {
+		if err != nil {
+			if err == io.EOF {
+				client.Disconnect()
+			} else {
+				panic(err)
+			}
+			return
+		}
+	}
+	if msg.kind == mumbleproto.MessageVersion {
+		version := &mumbleproto.Version{}
+		err := proto.Unmarshal(msg.buf, version)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		client.version = *version.Version
+	}
+
+	msg, err = client.readProtoMessage()
+	if err != nil {
+		if err != nil {
+			if err == io.EOF {
+				client.Disconnect()
+			} else {
+				panic(err)
+			}
+			return
+		}
+	}
+
+	if msg.kind == mumbleproto.MessageAuthenticate {
+		s.handleAuthenticateMessage(msg)
+	}
+
+	servermodule.Cast(APIkeys.Receive, client)
 }
 
 func (s *SessionManager) BroadcastMessage(msg interface{}) {
@@ -74,20 +127,18 @@ func (s *SessionManager) BroadcastMessage(msg interface{}) {
 	}
 }
 
-func (s *SessionManager) SetUserOption(userState *mumbleproto.UserState) {
+func (s *SessionManager) SetUserOption(client *Client, userState *mumbleproto.UserState) {
 
-	actor, ok := s.clientList[*userState.Actor]
+	//actor는 메시지를 보낸 클라이언트
+	actor, ok := s.clientList[client.Session()]
 	if !ok {
-		//server.Panic("Client not found in server's client map.")
+		panic("Client not found in server's client map.")
 		return
 	}
 
-	//actor는 메시지를 보낸 클라이언트
-	//target은 메세지 패킷의 session 값; 메시지의 대상
-
+	//target이 없으면 actor가 target
 	target := actor
 	if userState.Session != nil {
-		// target -> 메시지의 session에 해당하는 client 메시지의 대상. sender일 수도 있고 아닐 수도 있다
 		target, ok = s.clientList[*userState.Session]
 		if !ok {
 			fmt.Println("Invalid session in UserState message")
@@ -98,7 +149,11 @@ func (s *SessionManager) SetUserOption(userState *mumbleproto.UserState) {
 	userState.Session = proto.Uint32(target.Session())
 	userState.Actor = proto.Uint32(actor.Session())
 
-	tempUserState := &mumbleproto.UserState{}
+	newUserState := &mumbleproto.UserState{
+		Deaf:     proto.Bool(false),
+		SelfDeaf: proto.Bool(false),
+		Name:     userState.Name,
+	}
 	if userState.Mute != nil {
 		if actor.Session() != target.Session() {
 			//can't change other users mute state
@@ -106,7 +161,7 @@ func (s *SessionManager) SetUserOption(userState *mumbleproto.UserState) {
 			sendPermissionDenied(actor, mumbleproto.PermissionDenied_Permission)
 		} else {
 			// 변경
-			tempUserState.Mute = userState.Mute
+			newUserState.Mute = userState.Mute
 		}
 	} else {
 		if actor.Session() != target.Session() {
@@ -116,14 +171,93 @@ func (s *SessionManager) SetUserOption(userState *mumbleproto.UserState) {
 		}
 	}
 
-	newMsg := &mumbleproto.UserState{
-		Deaf:     proto.Bool(false),
-		SelfDeaf: proto.Bool(false),
-		Name:     userState.Name,
+	if userState.ChannelId != nil {
+		servermodule.Cast(APIkeys.BroadcastChannel, *userState.ChannelId, newUserState)
+	}
+}
+
+func (s *SessionManager) SendMessages(sessions []uint32, msg interface{}) {
+	fmt.Println("Sending text to", sessions)
+	for _, session := range sessions {
+		fmt.Println(session)
+		if client, ok := s.clientList[session]; ok {
+			client.SendMessage(msg)
+		}
+	}
+}
+func (s *SessionManager) isValidName(userName string) bool {
+
+	for _, eachClient := range s.clientList {
+		if eachClient.UserName == userName {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *SessionManager) handleAuthenticateMessage(msg *Message) {
+
+	authenticate := &mumbleproto.Authenticate{}
+	err := proto.Unmarshal(msg.buf, authenticate)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	client := msg.client
+	newUserName := *authenticate.Username
+	if !s.isValidName(newUserName) {
+		client.Disconnect()
+		return
+	}
+	client.UserName = newUserName
+
+	client.cryptState.GenerateKey()
+	err = client.SendMessage(&mumbleproto.CryptSetup{
+		Key:         client.cryptState.Key(),
+		ClientNonce: client.cryptState.EncryptIV(),
+		ServerNonce: client.cryptState.DecryptIV(),
+	})
+	if err != nil {
+		fmt.Println("error sending msg")
+	}
+	client.codecs = authenticate.CeltVersions
+	if len(client.codecs) == 0 {
+		//todo : no codec msg case
 	}
 
-	if userState.ChannelId != nil {
-		servermodule.Cast(APIkeys.BroadcastChannel, int(*userState.ChannelId), newMsg)
+	//send codec version
+	err = client.SendMessage(&mumbleproto.CodecVersion{
+		Alpha:       proto.Int32(-2147483637),
+		Beta:        proto.Int32(-2147483632),
+		PreferAlpha: proto.Bool(false),
+		Opus:        proto.Bool(true),
+	})
+	if err != nil {
+		fmt.Println("error sending codec version")
+		return
+	}
+	/// send channel state
+	servermodule.Cast(APIkeys.SendChannelList, client)
+	// enter the root channel as default channel
+	servermodule.Cast(APIkeys.EnterChannel, ROOT_CHANNEL, client)
+
+	sync := &mumbleproto.ServerSync{}
+	sync.Session = proto.Uint32(uint32(client.session))
+	sync.MaxBandwidth = proto.Uint32(72000)
+	sync.WelcomeText = proto.String("Welcome to murgo server")
+	if err := client.SendMessage(sync); err != nil {
+		fmt.Println("error sending message")
+		return
+	}
+
+	serverConfigMsg := &mumbleproto.ServerConfig{
+		AllowHtml:     proto.Bool(true),
+		MessageLength: proto.Uint32(128),
+		MaxBandwidth:  proto.Uint32(240000),
+	}
+	if err := client.SendMessage(serverConfigMsg); err != nil {
+		fmt.Println("error sending message")
+		return
 	}
 }
 

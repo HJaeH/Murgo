@@ -83,7 +83,7 @@ func (s *Sup) supervisorLoop() {
 }
 
 func (s *Sup) handleCast(msg *CastMessage) {
-	fmt.Println("Cast API", msg.apiKey)
+	//fmt.Println("Cast API", msg.apiKey)
 
 	/*if msg.args == nil {
 		msg.apiVal.Call([]reflect.Value{})
@@ -95,7 +95,7 @@ func (s *Sup) handleCast(msg *CastMessage) {
 	case msg.syncChan <- true:
 		doCall(msg.apiVal, msg.args...)
 	default:
-		fmt.Println("buffer is full")
+		fmt.Println("buffer is full in", msg.apiKey)
 		cast(msg.apiKey, msg.args...)
 	}
 

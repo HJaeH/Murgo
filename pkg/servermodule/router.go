@@ -46,12 +46,12 @@ func (r *Router) run() {
 		select {
 		//todo : cast, call 반복 코드 제거
 		case m := <-r.callRouter:
-			fmt.Println(m.apiKey, "call received")
+			//fmt.Println(m.apiKey, "call received")
 			api := r.getAPI(m.apiKey)
 			mod := api.module
 			select {
 			case mod.buf <- true:
-				fmt.Println("In ", mod.mid, ", the num of running gorouines : ", len(mod.buf))
+				//fmt.Println("In ", mod.mid, ", the num of running gorouines : ", len(mod.buf))
 				/*api := r.getAPI(m.apiKey)
 				mod := api.module*/
 				mod.sup.callChan <- &CallMessage{
@@ -64,12 +64,12 @@ func (r *Router) run() {
 				}
 			}
 		case m := <-r.castRouter:
-			fmt.Println(m.apiKey, "cast received")
+			//fmt.Println(m.apiKey, "cast received")
 			api := r.getAPI(m.apiKey)
 			mod := api.module
 			select {
 			case mod.buf <- true:
-				fmt.Println("In ", mod.mid, ", the num of running gorouines : ", len(mod.buf))
+				//fmt.Println("In ", mod.mid, ", the num of running gorouines : ", len(mod.buf))
 				/*api := r.getAPI(m.apiKey)
 				mod := api.module*/
 				mod.sup.castChan <- &CastMessage{

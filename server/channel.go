@@ -5,19 +5,21 @@ import (
 
 	"murgo/pkg/mumbleproto"
 
+	"reflect"
+
 	"github.com/golang/protobuf/proto"
 )
 
 //todo : Each Channel should be a module not just a data structure
 type Channel struct {
 	//todo add num user and keep user ids
-	Id       int
+	Id       uint32
 	Name     string
 	Position int
 
 	temporary   bool
 	clients     map[uint32]*Client
-	parentId    int
+	parentId    uint32
 	children    map[int]*Channel
 	description string
 
@@ -27,7 +29,7 @@ type Channel struct {
 	//Links map[int]*Channel
 }
 
-func NewChannel(id int, name string) (channel *Channel) {
+func NewChannel(id uint32, name string) (channel *Channel) {
 	channel = new(Channel)
 	channel.Id = id
 	channel.Name = name
@@ -56,8 +58,8 @@ func (channel *Channel) addClient(client *Client) {
 
 func (channel *Channel) toChannelState() *mumbleproto.ChannelState {
 	channelStateMsg := &mumbleproto.ChannelState{
-		ChannelId:   proto.Uint32(uint32(channel.Id)),
-		Parent:      proto.Uint32(uint32(channel.parentId)),
+		ChannelId:   proto.Uint32(channel.Id),
+		Parent:      proto.Uint32(channel.parentId),
 		Name:        proto.String(channel.Name),
 		Description: proto.String(channel.description),
 		Temporary:   proto.Bool(channel.temporary),
@@ -70,11 +72,11 @@ func (channel *Channel) SendUserListInChannel(client *Client) {
 	fmt.Println(channel.Name)
 	for _, eachUser := range channel.clients {
 		fmt.Print(eachUser.UserName)
-		/*if reflect.DeepEqual(eachUser, client) {
+		if reflect.DeepEqual(eachUser, client) {
 			continue
-		}*/
+		}
 		fmt.Println("client list: ", client.UserName)
-		err := client.SendMessage(eachUser.ToUserState())
+		err := client.SendMessage(eachUser.toUserState())
 		if err != nil {
 			panic(" Error sending channel User list")
 		}

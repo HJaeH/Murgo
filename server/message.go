@@ -1,10 +1,9 @@
 package server
 
 type Message struct {
-	buf         []byte
-	kind        uint16
-	client      *Client
-	testCounter int
+	buf    []byte
+	kind   uint16
+	client *Client
 }
 
 /*

@@ -28,21 +28,5 @@ func (ms *MurgoSupervisor) Init() {
 	servermodule.StartLinkGenServer(ms, new(SessionManager), true)
 	servermodule.StartLinkGenServer(ms, new(ChannelManager), true)
 	servermodule.StartLinkGenServer(ms, new(TlsServer), false)
-	servermodule.StartLinkGenServer(ms, new(MessageHandler), true)
-	servermodule.StartLinkGenServer(ms, new(Channel), true)
+	servermodule.StartLinkGenServer(ms, new(MessageHandler), false)
 }
-
-//todo : startchild 구현, tlsclient -> supervisor로 구현
-/*
-func (ms *MurgoSupervisor) StartChild() {
-	servermodule.Call("TlsClient", )
-}
-*/
-
-/*func (murgoSupervisor *MurgoSupervisor)StartLink(){
-	//NewSupervisor calls the init callback
-	supervisor := servermodule.StartLinkSupervisor(murgoSupervisor)
-
-	//supervisor.Start(murgoSupervisor)
-	murgoSupervisor.supervisor = supervisor
-}*/
