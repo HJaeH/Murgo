@@ -73,7 +73,7 @@ func (m *MessageHandler) handleAuthenticateMessage(msg *Message) {
 		fmt.Println("============")
 	}
 	client.cryptState.GenerateKey()
-	err = client.SendMessage(&mumbleproto.CryptSetup{
+	err = client.sendMessage(&mumbleproto.CryptSetup{
 		Key:         client.cryptState.Key(),
 		ClientNonce: client.cryptState.EncryptIV(),
 		ServerNonce: client.cryptState.DecryptIV(),
@@ -87,7 +87,7 @@ func (m *MessageHandler) handleAuthenticateMessage(msg *Message) {
 	}
 
 	//send codec version
-	err = client.SendMessage(&mumbleproto.CodecVersion{
+	err = client.sendMessage(&mumbleproto.CodecVersion{
 		Alpha:       proto.Int32(-2147483637),
 		Beta:        proto.Int32(-2147483632),
 		PreferAlpha: proto.Bool(false),
@@ -106,7 +106,7 @@ func (m *MessageHandler) handleAuthenticateMessage(msg *Message) {
 	sync.Session = proto.Uint32(uint32(client.session))
 	sync.MaxBandwidth = proto.Uint32(72000)
 	sync.WelcomeText = proto.String("Welcome to murgo server")
-	if err := client.SendMessage(sync); err != nil {
+	if err := client.sendMessage(sync); err != nil {
 		fmt.Println("error sending message")
 		return
 	}
@@ -116,7 +116,7 @@ func (m *MessageHandler) handleAuthenticateMessage(msg *Message) {
 		MessageLength: proto.Uint32(128),
 		MaxBandwidth:  proto.Uint32(240000),
 	}
-	if err := client.SendMessage(serverConfigMsg); err != nil {
+	if err := client.sendMessage(serverConfigMsg); err != nil {
 		fmt.Println("error sending message")
 		return
 	}
@@ -133,7 +133,7 @@ func (m *MessageHandler) handlePingMessage(msg *Message) {
 
 	//fmt.Println("ping info:", ping, "msg id : ", msg.testCounter)
 	client := msg.client
-	client.SendMessage(&mumbleproto.Ping{
+	client.sendMessage(&mumbleproto.Ping{
 		Timestamp: ping.Timestamp,
 		Good:      proto.Uint32(1),
 		Late:      proto.Uint32(1),
@@ -192,7 +192,7 @@ func (m *MessageHandler) handleUserStatsMessage(msg *Message) {
 		//Onlinesecs:
 		//Idlesecs:
 	}
-	client.SendMessage(newUserStatsMsg)
+	client.sendMessage(newUserStatsMsg)
 }
 
 // protocol handling dummy for UserRemoveMessage
@@ -352,7 +352,7 @@ func sendPermissionDenied(client *Client, denyType mumbleproto.PermissionDenied_
 		Type:    &denyType,
 	}
 	fmt.Println("Permission denied ", permissionDeniedMsg)
-	err := client.SendMessage(permissionDeniedMsg)
+	err := client.sendMessage(permissionDeniedMsg)
 	if err != nil {
 		fmt.Println("Error sending messsage")
 		return

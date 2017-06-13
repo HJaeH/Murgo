@@ -40,7 +40,6 @@ func (s *SessionManager) RemoveClient(client *Client) {
 	if channel != nil {
 		channel.removeClient(client)
 	}
-	client.SendMessage(client.toUserState())
 	s.sessionPool.Reclaim(client.Session())
 }
 
@@ -70,7 +69,7 @@ func (s *SessionManager) HandleIncomingClient(conn net.Conn) {
 		Release:     proto.String("Murgo"),
 		CryptoModes: config.SupportedModes(),
 	}
-	err := client.SendMessage(version)
+	err := client.sendMessage(version)
 	if err != nil {
 		fmt.Println("Error sending message to client")
 	}
@@ -112,7 +111,7 @@ func (s *SessionManager) HandleIncomingClient(conn net.Conn) {
 	}
 
 	if msg.kind == mumbleproto.MessageAuthenticate {
-		s.handleAuthenticateMessage(msg)
+		s.handleAuthenticate(msg)
 	}
 
 	servermodule.Cast(APIkeys.Receive, client)
@@ -123,7 +122,7 @@ func (s *SessionManager) BroadcastMessage(msg interface{}) {
 		/*if client.state < StateClientAuthenticated {
 			continue
 		}*/
-		eachClient.SendMessage(msg)
+		eachClient.sendMessage(msg)
 	}
 }
 
@@ -181,7 +180,7 @@ func (s *SessionManager) SendMessages(sessions []uint32, msg interface{}) {
 	for _, session := range sessions {
 		fmt.Println(session)
 		if client, ok := s.clientList[session]; ok {
-			client.SendMessage(msg)
+			client.sendMessage(msg)
 		}
 	}
 }
@@ -195,7 +194,7 @@ func (s *SessionManager) isValidName(userName string) bool {
 	return true
 }
 
-func (s *SessionManager) handleAuthenticateMessage(msg *Message) {
+func (s *SessionManager) handleAuthenticate(msg *Message) {
 
 	authenticate := &mumbleproto.Authenticate{}
 	err := proto.Unmarshal(msg.buf, authenticate)
@@ -212,7 +211,7 @@ func (s *SessionManager) handleAuthenticateMessage(msg *Message) {
 	client.UserName = newUserName
 
 	client.cryptState.GenerateKey()
-	err = client.SendMessage(&mumbleproto.CryptSetup{
+	err = client.sendMessage(&mumbleproto.CryptSetup{
 		Key:         client.cryptState.Key(),
 		ClientNonce: client.cryptState.EncryptIV(),
 		ServerNonce: client.cryptState.DecryptIV(),
@@ -226,7 +225,7 @@ func (s *SessionManager) handleAuthenticateMessage(msg *Message) {
 	}
 
 	//send codec version
-	err = client.SendMessage(&mumbleproto.CodecVersion{
+	err = client.sendMessage(&mumbleproto.CodecVersion{
 		Alpha:       proto.Int32(-2147483637),
 		Beta:        proto.Int32(-2147483632),
 		PreferAlpha: proto.Bool(false),
@@ -245,7 +244,7 @@ func (s *SessionManager) handleAuthenticateMessage(msg *Message) {
 	sync.Session = proto.Uint32(uint32(client.session))
 	sync.MaxBandwidth = proto.Uint32(72000)
 	sync.WelcomeText = proto.String("Welcome to murgo server")
-	if err := client.SendMessage(sync); err != nil {
+	if err := client.sendMessage(sync); err != nil {
 		fmt.Println("error sending message")
 		return
 	}
@@ -255,7 +254,7 @@ func (s *SessionManager) handleAuthenticateMessage(msg *Message) {
 		MessageLength: proto.Uint32(128),
 		MaxBandwidth:  proto.Uint32(240000),
 	}
-	if err := client.SendMessage(serverConfigMsg); err != nil {
+	if err := client.sendMessage(serverConfigMsg); err != nil {
 		fmt.Println("error sending message")
 		return
 	}

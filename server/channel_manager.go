@@ -116,7 +116,7 @@ func (c *ChannelManager) channel(channelId uint32) (*Channel, error) {
 
 func (c *ChannelManager) SendChannelList(client *Client) {
 	for _, eachChannel := range c.channelList {
-		client.SendMessage(eachChannel.toChannelState())
+		client.sendMessage(eachChannel.toChannelState())
 	}
 }
 

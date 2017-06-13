@@ -76,7 +76,7 @@ func (channel *Channel) SendUserListInChannel(client *Client) {
 			continue
 		}
 		fmt.Println("client list: ", client.UserName)
-		err := client.SendMessage(eachUser.toUserState())
+		err := client.sendMessage(eachUser.toUserState())
 		if err != nil {
 			panic(" Error sending channel User list")
 		}

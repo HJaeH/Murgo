@@ -64,15 +64,14 @@ func (t *TlsServer) Receive(client *Client) {
 	for {
 		//todo : 클라이언트가 사라지는 시점 파악
 		msg, err := client.readProtoMessage()
-		if (*client.conn) == nil {
-			fmt.Println("-=====-=-=-=")
-		}
 		if err != nil {
 			if err != nil {
 				if err == io.EOF {
 					client.Disconnect()
 				} else {
-					panic(err)
+					//client disconnected
+					return
+					//panic(err)
 				}
 				return
 			}

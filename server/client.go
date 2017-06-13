@@ -85,7 +85,7 @@ func newClient(conn *net.Conn, session uint32) *Client {
 
 //send msg to client
 
-func (c *Client) SendMessage(msg interface{}) error {
+func (c *Client) sendMessage(msg interface{}) error {
 
 	buf := new(bytes.Buffer)
 	var (
@@ -214,8 +214,8 @@ func (c *Client) readProtoMessage() (msg *Message, err error) {
 func (c *Client) Disconnect() {
 	if !c.disconnected {
 		c.disconnected = true
-		servermodule.Call(APIkeys.RemoveClient, c)
 		(*c.conn).Close()
+		servermodule.Cast(APIkeys.RemoveClient, c)
 	}
 }
 
@@ -253,4 +253,18 @@ func (c *Client) Receive() {
 		}
 		servermodule.Cast(APIkeys.HandleMessage, msg)
 	}
+}
+
+func (c *Client) reject(rejectType mumbleproto.Reject_RejectType, reason string) {
+	var reasonString *string = nil
+	if len(reason) > 0 {
+		reasonString = proto.String(reason)
+	}
+
+	c.sendMessage(&mumbleproto.Reject{
+		Type:   rejectType.Enum(),
+		Reason: reasonString,
+	})
+
+	c.Disconnect()
 }
