@@ -33,7 +33,6 @@ func NewChannel(id uint32, name string) (channel *Channel) {
 	return channel
 }
 
-// TODO : need to be run as genserver
 func (c *Channel) startChannel() {
 }
 
