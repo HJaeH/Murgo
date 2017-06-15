@@ -14,6 +14,7 @@ import (
 	"io"
 
 	"github.com/golang/protobuf/proto"
+	"mumble.info/grumble/pkg/acl"
 )
 
 type SessionManager struct {
@@ -50,7 +51,6 @@ func (s *SessionManager) Init() {
 	servermodule.RegisterAPI((*SessionManager).SetUserOption, APIkeys.SetUserOption)
 	servermodule.RegisterAPI((*SessionManager).RemoveClient, APIkeys.RemoveClient)
 	servermodule.RegisterAPI((*SessionManager).SendMessages, APIkeys.SendMessages)
-	servermodule.RegisterAPI((*SessionManager).isValidName, APIkeys.CheckUserDuplication)
 
 	s.sessionPool = sessionpool.New()
 	s.clientList = make(map[uint32]*Client)
@@ -59,7 +59,7 @@ func (s *SessionManager) Init() {
 //// APIs
 func (s *SessionManager) HandleIncomingClient(conn net.Conn) {
 
-	session := s.sessionPool.Get() - 1
+	session := s.sessionPool.Get()
 	client := newClient(&conn, session)
 	fmt.Println(session, "is connected")
 	s.clientList[session] = client
@@ -74,9 +74,7 @@ func (s *SessionManager) HandleIncomingClient(conn net.Conn) {
 		fmt.Println("Error sending message to client")
 	}
 
-	fmt.Println("====")
 	msg, err := client.readProtoMessage()
-	fmt.Println("====")
 	if err != nil {
 		if err != nil {
 			if err == io.EOF {
@@ -96,6 +94,7 @@ func (s *SessionManager) HandleIncomingClient(conn net.Conn) {
 		}
 
 		client.version = *version.Version
+		fmt.Println(*version.Version)
 	}
 
 	msg, err = client.readProtoMessage()
@@ -114,7 +113,7 @@ func (s *SessionManager) HandleIncomingClient(conn net.Conn) {
 		s.handleAuthenticate(msg)
 	}
 
-	servermodule.Cast(APIkeys.Receive, client)
+	servermodule.AsyncCall(APIkeys.Receive, client)
 }
 
 func (s *SessionManager) BroadcastMessage(msg interface{}) {
@@ -171,7 +170,7 @@ func (s *SessionManager) SetUserOption(client *Client, userState *mumbleproto.Us
 	}
 
 	if userState.ChannelId != nil {
-		servermodule.Cast(APIkeys.BroadcastChannel, *userState.ChannelId, newUserState)
+		servermodule.AsyncCall(APIkeys.BroadcastChannel, *userState.ChannelId, newUserState)
 	}
 }
 
@@ -181,6 +180,9 @@ func (s *SessionManager) SendMessages(sessions []uint32, msg interface{}) {
 		fmt.Println(session)
 		if client, ok := s.clientList[session]; ok {
 			client.sendMessage(msg)
+		} else {
+			fmt.Println(session, "=")
+			panic("session not exist")
 		}
 	}
 }
@@ -210,11 +212,11 @@ func (s *SessionManager) handleAuthenticate(msg *Message) {
 	}
 	client.UserName = newUserName
 
-	client.cryptState.GenerateKey()
+	client.crypt.GenerateKey()
 	err = client.sendMessage(&mumbleproto.CryptSetup{
-		Key:         client.cryptState.Key(),
-		ClientNonce: client.cryptState.EncryptIV(),
-		ServerNonce: client.cryptState.DecryptIV(),
+		Key:         client.crypt.Key(),
+		ClientNonce: client.crypt.EncryptIV(),
+		ServerNonce: client.crypt.DecryptIV(),
 	})
 	if err != nil {
 		fmt.Println("error sending msg")
@@ -231,19 +233,21 @@ func (s *SessionManager) handleAuthenticate(msg *Message) {
 		PreferAlpha: proto.Bool(false),
 		Opus:        proto.Bool(true),
 	})
+
 	if err != nil {
 		fmt.Println("error sending codec version")
 		return
 	}
 	/// send channel state
-	servermodule.Cast(APIkeys.SendChannelList, client)
+	servermodule.AsyncCall(APIkeys.SendChannelList, client)
 	// enter the root channel as default channel
-	servermodule.Cast(APIkeys.EnterChannel, ROOT_CHANNEL, client)
+	servermodule.AsyncCall(APIkeys.EnterChannel, ROOT_CHANNEL, client)
 
 	sync := &mumbleproto.ServerSync{}
 	sync.Session = proto.Uint32(uint32(client.session))
 	sync.MaxBandwidth = proto.Uint32(72000)
 	sync.WelcomeText = proto.String("Welcome to murgo server")
+	sync.Permissions = proto.Uint64(uint64(acl.AllPermissions))
 	if err := client.sendMessage(sync); err != nil {
 		fmt.Println("error sending message")
 		return

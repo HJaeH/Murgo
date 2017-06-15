@@ -50,7 +50,7 @@ type Client struct {
 	tokens []string
 
 	//crypt state
-	cryptState *config.CryptState
+	crypt *config.CryptState
 
 	//client connection state
 	state        int
@@ -67,7 +67,7 @@ type Client struct {
 func newClient(conn *net.Conn, session uint32) *Client {
 	//create new object
 	client := new(Client)
-	client.cryptState = new(config.CryptState)
+	client.crypt = new(config.CryptState)
 	client.userId = session
 
 	//tlsClient.MurgoSupervisor = supervisor
@@ -97,8 +97,8 @@ func (c *Client) sendMessage(msg interface{}) error {
 	kind = mumbleproto.MessageType(msg)
 	if kind == mumbleproto.MessageUDPTunnel {
 		msgData = msg.([]byte)
-		fmt.Println("-----")
 	} else {
+
 		protoMsg, ok := (msg).(proto.Message)
 		if !ok {
 			return errors.New("client: exepcted a proto.Message")
@@ -108,6 +108,7 @@ func (c *Client) sendMessage(msg interface{}) error {
 			return err
 		}
 	}
+
 	err = binary.Write(buf, binary.BigEndian, kind)
 	if err != nil {
 		return err
@@ -125,16 +126,22 @@ func (c *Client) sendMessage(msg interface{}) error {
 	if err != nil {
 		return err
 	}
+
+	if kind == mumbleproto.MessageUserState {
+		userState := &mumbleproto.UserState{}
+		err := proto.Unmarshal(msgData, userState)
+		if err != nil {
+			panic("error while unmarshalling")
+		}
+		fmt.Println(*userState.Session, "---  is sesison!@#!@#!@#")
+	}
 	//mutex.Unlock()
 
 	return nil
 }
 
-//todo : write시에 패킷 loss발생 해결 위함
-func (c *Client) SendMessage1(msg interface{}) error {
+func (c *Client) sendMessageWithInterval(msg interface{}) error {
 
-	//userState := msg.(*mumbleproto.UserState)
-	//fmt.Println("send user msg !! userstate info:", userState, "1!!")
 	time.Sleep(100 * time.Millisecond)
 	buf := new(bytes.Buffer)
 	var (
@@ -146,6 +153,7 @@ func (c *Client) SendMessage1(msg interface{}) error {
 	kind = mumbleproto.MessageType(msg)
 	if kind == mumbleproto.MessageUDPTunnel {
 		msgData = msg.([]byte)
+		//fmt.Print(msgData, " ")
 	} else {
 		protoMsg, ok := (msg).(proto.Message)
 		if !ok {
@@ -215,7 +223,7 @@ func (c *Client) Disconnect() {
 	if !c.disconnected {
 		c.disconnected = true
 		(*c.conn).Close()
-		servermodule.Cast(APIkeys.RemoveClient, c)
+		servermodule.AsyncCall(APIkeys.RemoveClient, c)
 	}
 }
 
@@ -237,22 +245,6 @@ func (c *Client) toUserState() *mumbleproto.UserState {
 
 func (c *Client) Session() uint32 {
 	return c.session
-}
-func (c *Client) Receive() {
-	for {
-		msg, err := c.readProtoMessage()
-		if err != nil {
-			if err != nil {
-				if err == io.EOF {
-					c.Disconnect()
-				} else {
-					panic(err)
-				}
-				return
-			}
-		}
-		servermodule.Cast(APIkeys.HandleMessage, msg)
-	}
 }
 
 func (c *Client) reject(rejectType mumbleproto.Reject_RejectType, reason string) {

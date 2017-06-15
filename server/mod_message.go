@@ -11,12 +11,15 @@ import (
 
 type MessageHandler struct{}
 
-func (messageHandler *MessageHandler) HandleMassage(msg *Message) {
+type Message struct {
+	buf    []byte
+	kind   uint16
+	client *Client
+}
+
+func (messageHandler *MessageHandler) HandleMessage(msg *Message) {
 	switch msg.kind {
 
-	//todo : authenticate과정을 handleincoming client로 넘겨서 reject구현
-	/*case mumbleproto.MessageAuthenticate:
-	messageHandler.handleAuthenticateMessage(msg)*/
 	case mumbleproto.MessagePing:
 		messageHandler.handlePingMessage(msg)
 	case mumbleproto.MessageChannelRemove:
@@ -26,7 +29,6 @@ func (messageHandler *MessageHandler) HandleMassage(msg *Message) {
 	case mumbleproto.MessageUserState:
 		messageHandler.handleUserStateMessage(msg)
 	case mumbleproto.MessageUserRemove:
-		fmt.Println("=========")
 		messageHandler.handleUserRemoveMessage(msg)
 	case mumbleproto.MessageBanList:
 		messageHandler.handleBanListMessage(msg)
@@ -38,8 +40,8 @@ func (messageHandler *MessageHandler) HandleMassage(msg *Message) {
 		messageHandler.handleQueryUsers(msg)
 	case mumbleproto.MessageCryptSetup:
 		messageHandler.handleCryptSetup(msg)
-	case mumbleproto.MessageContextAction:
-		fmt.Print("MessageContextAction from client")
+	//case mumbleproto.MessageContextAction:
+	//	fmt.Print("MessageContextAction from client")
 	case mumbleproto.MessageUserList:
 		messageHandler.handleUserList(msg)
 	case mumbleproto.MessageVoiceTarget:
@@ -55,73 +57,6 @@ func (messageHandler *MessageHandler) HandleMassage(msg *Message) {
 	}
 }
 
-////Authenticate message handling
-func (m *MessageHandler) handleAuthenticateMessage(msg *Message) {
-
-	authenticate := &mumbleproto.Authenticate{}
-	err := proto.Unmarshal(msg.buf, authenticate)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	// crypto setup
-	client := msg.client
-	client.UserName = *authenticate.Username
-	servermodule.Call(APIkeys.CheckUserDuplication, client)
-	if client == nil {
-		fmt.Println("============")
-	}
-	client.cryptState.GenerateKey()
-	err = client.sendMessage(&mumbleproto.CryptSetup{
-		Key:         client.cryptState.Key(),
-		ClientNonce: client.cryptState.EncryptIV(),
-		ServerNonce: client.cryptState.DecryptIV(),
-	})
-	if err != nil {
-		fmt.Println("error sending msg")
-	}
-	client.codecs = authenticate.CeltVersions
-	if len(client.codecs) == 0 {
-		//todo : no codec msg case
-	}
-
-	//send codec version
-	err = client.sendMessage(&mumbleproto.CodecVersion{
-		Alpha:       proto.Int32(-2147483637),
-		Beta:        proto.Int32(-2147483632),
-		PreferAlpha: proto.Bool(false),
-		Opus:        proto.Bool(true),
-	})
-	if err != nil {
-		fmt.Println("error sending codec version")
-		return
-	}
-	/// send channel state
-	servermodule.Cast(APIkeys.SendChannelList, client)
-	// enter the root channel as default channel
-	servermodule.Cast(APIkeys.EnterChannel, ROOT_CHANNEL, client)
-
-	sync := &mumbleproto.ServerSync{}
-	sync.Session = proto.Uint32(uint32(client.session))
-	sync.MaxBandwidth = proto.Uint32(72000)
-	sync.WelcomeText = proto.String("Welcome to murgo server")
-	if err := client.sendMessage(sync); err != nil {
-		fmt.Println("error sending message")
-		return
-	}
-
-	serverConfigMsg := &mumbleproto.ServerConfig{
-		AllowHtml:     proto.Bool(true),
-		MessageLength: proto.Uint32(128),
-		MaxBandwidth:  proto.Uint32(240000),
-	}
-	if err := client.sendMessage(serverConfigMsg); err != nil {
-		fmt.Println("error sending message")
-		return
-	}
-}
-
 func (m *MessageHandler) handlePingMessage(msg *Message) {
 	ping := &mumbleproto.Ping{}
 	err := proto.Unmarshal(msg.buf, ping)
@@ -129,17 +64,15 @@ func (m *MessageHandler) handlePingMessage(msg *Message) {
 		fmt.Println(err)
 		return
 	}
-	//fmt.Println("ping message:", ping, "msg id :", msg.testCounter, "from:", msg.client.UserName)
-
-	//fmt.Println("ping info:", ping, "msg id : ", msg.testCounter)
 	client := msg.client
+	fmt.Println(ping)
 	client.sendMessage(&mumbleproto.Ping{
-		Timestamp: ping.Timestamp,
-		Good:      proto.Uint32(1),
-		Late:      proto.Uint32(1),
-		Lost:      proto.Uint32(1),
-		Resync:    proto.Uint32(1),
+		Timestamp:  ping.Timestamp,
+		TcpPackets: ping.TcpPackets,
+		TcpPingVar: ping.TcpPingVar,
+		TcpPingAvg: ping.TcpPingAvg,
 	})
+
 }
 
 func (m *MessageHandler) handleUserStateMessage(msg *Message) {
@@ -155,8 +88,7 @@ func (m *MessageHandler) handleUserStateMessage(msg *Message) {
 	if userState.ChannelId != nil {
 		servermodule.Call(APIkeys.EnterChannel, *userState.ChannelId, msg.client)
 	}
-
-	servermodule.Cast(APIkeys.SetUserOption, msg.client, userState)
+	//servermodule.Cast(APIkeys.SetUserOption, msg.client, userState)
 
 }
 
@@ -239,11 +171,11 @@ func (m *MessageHandler) handleTextMessage(msg *Message) {
 	}
 	// send text message to channels
 	for _, eachChannelId := range textMsg.ChannelId {
-		servermodule.Cast(APIkeys.BroadCastChannelWithoutMe, eachChannelId, client, newMsg)
+		servermodule.AsyncCall(APIkeys.BroadCastChannelWithoutMe, eachChannelId, client, newMsg)
 	}
 
 	// send text message to users
-	servermodule.Cast(APIkeys.SendMessages, textMsg.Session, newMsg)
+	servermodule.AsyncCall(APIkeys.SendMessages, textMsg.Session, newMsg)
 }
 
 // protocol handling dummy for Aclmessage
@@ -298,7 +230,6 @@ func (m *MessageHandler) handleUserList(msg *Message) {
 }
 
 // protocol handling dummy for Voicetarget
-
 func (m *MessageHandler) handleVoiceTarget(msg *Message) {
 	msgProto := &mumbleproto.VoiceTarget{}
 	err := proto.Unmarshal(msg.buf, msgProto)
@@ -307,7 +238,6 @@ func (m *MessageHandler) handleVoiceTarget(msg *Message) {
 		return
 	}
 	fmt.Println("voice target info:", msgProto, "from:", msg.client.UserName)
-
 }
 
 // protocol handling dummy for PermissionQuery
@@ -361,6 +291,6 @@ func sendPermissionDenied(client *Client, denyType mumbleproto.PermissionDenied_
 }
 
 func (m *MessageHandler) Init() {
-	servermodule.RegisterAPI((*MessageHandler).HandleMassage, APIkeys.HandleMessage)
+	servermodule.RegisterAPI((*MessageHandler).HandleMessage, APIkeys.HandleMessage)
 
 }

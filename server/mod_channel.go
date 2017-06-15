@@ -28,6 +28,7 @@ func (c *ChannelManager) Init() {
 	servermodule.RegisterAPI((*ChannelManager).BroadCastChannel, APIkeys.BroadcastChannel)
 	servermodule.RegisterAPI((*ChannelManager).AddChannel, APIkeys.AddChannel)
 	servermodule.RegisterAPI((*ChannelManager).BroadCastChannelWithoutMe, APIkeys.BroadCastChannelWithoutMe)
+	servermodule.RegisterAPI((*ChannelManager).BroadCastVoiceToChannel, APIkeys.BroadCastVoiceToChannel)
 
 	//assign heap
 
@@ -63,7 +64,7 @@ func (c *ChannelManager) AddChannel(channelName string, client *Client) {
 	//let all session know the created channel
 	channelStateMsg := channel.toChannelState()
 
-	servermodule.Cast(APIkeys.BroadcastMessage, channelStateMsg)
+	servermodule.AsyncCall(APIkeys.BroadcastMessage, channelStateMsg)
 	//let the channel creator enter the channel
 	c.EnterChannel(channel.Id, client)
 
@@ -87,12 +88,12 @@ func (c *ChannelManager) BroadCastChannel(channelId uint32, msg interface{}) {
 	}
 	for _, client := range channel.clients {
 		//todo : send msg 1
-		client.SendMessage1(msg)
+		client.sendMessageWithInterval(msg)
 	}
 }
 
-func (channelManager *ChannelManager) BroadCastChannelWithoutMe(channelId uint32, me *Client, msg interface{}) {
-	channel, err := channelManager.channel(channelId)
+func (c *ChannelManager) BroadCastChannelWithoutMe(channelId uint32, me *Client, msg interface{}) {
+	channel, err := c.channel(channelId)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -102,7 +103,10 @@ func (channelManager *ChannelManager) BroadCastChannelWithoutMe(channelId uint32
 			continue
 		}
 		//todo send message1
-		eachClient.SendMessage1(msg)
+		err = eachClient.sendMessageWithInterval(msg)
+		if err != nil {
+			fmt.Println(err)
+		}
 	}
 }
 
@@ -115,7 +119,9 @@ func (c *ChannelManager) channel(channelId uint32) (*Channel, error) {
 }
 
 func (c *ChannelManager) SendChannelList(client *Client) {
+	fmt.Println("send channel list :")
 	for _, eachChannel := range c.channelList {
+		fmt.Println(eachChannel.Name, "   === ")
 		client.sendMessage(eachChannel.toChannelState())
 	}
 }
@@ -145,20 +151,27 @@ func (c *ChannelManager) EnterChannel(channelId uint32, client *Client) {
 	userState := client.toUserState()
 
 	if oldChannel != nil && oldChannel.Id != ROOT_CHANNEL {
-		//이전 채널에 떠났음을 알림
+		//이전에 있던 채널에 떠난 유저의 userstate message 전송
 		c.BroadCastChannelWithoutMe(oldChannel.Id, client, userState)
+		//c.BroadCastChannel(oldChannel.Id, userState)
 	}
 
-	// 변한 상태를 클라이언트에게 알림
+	userState.Mute = proto.Bool(false)
+	userState.Deaf = proto.Bool(false)
+	userState.SelfMute = proto.Bool(false)
+	userState.SelfDeaf = proto.Bool(false)
+	userState.Suppress = proto.Bool(false)
+	//새 채널에 알림
 	if newChannel.Id != ROOT_CHANNEL {
 		//새 채널입장을 채널 유저들에게 알림
+
 		c.BroadCastChannel(newChannel.Id, userState)
 		//c.broadCastChannelWithoutMe(newChannel.Id, userState, client)
 		//채널에 있는 유저들을 입장하는 유저에게 알림
 		newChannel.SendUserListInChannel(client)
 	} else {
 		//send message1 따로 분리
-		client.SendMessage1(userState)
+		client.sendMessageWithInterval(userState)
 	}
 
 	if err != nil {
@@ -183,7 +196,7 @@ func (c *ChannelManager) removeChannel(tempChannel interface{}) {
 		c.EnterChannel(ROOT_CHANNEL, client)
 
 		//channelManager.Call(channelManager.supervisor.sessionManager)
-		servermodule.Cast(APIkeys.BroadcastMessage, userStateMsg)
+		servermodule.AsyncCall(APIkeys.BroadcastMessage, userStateMsg)
 	}
 
 	// Remove the channel itself
@@ -197,7 +210,13 @@ func (c *ChannelManager) removeChannel(tempChannel interface{}) {
 	channelRemoveMsg := &mumbleproto.ChannelRemove{
 		ChannelId: proto.Uint32(channel.Id),
 	}
-	servermodule.Cast(APIkeys.BroadcastMessage, channelRemoveMsg)
+	servermodule.AsyncCall(APIkeys.BroadcastMessage, channelRemoveMsg)
+}
+
+func (c *ChannelManager) BroadCastVoiceToChannel(client *Client, voiceData []byte) {
+	channel := client.Channel
+
+	c.BroadCastChannelWithoutMe(channel.Id, client, voiceData)
 }
 
 func (c *ChannelManager) printChannels() {

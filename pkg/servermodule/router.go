@@ -10,35 +10,32 @@ const (
 )
 
 type Router struct {
-	callRouter chan *CallMessage
-	castRouter chan *CastMessage
+	callRouter      chan *CallMessage
+	asyncCallRouter chan *AsyncCallMessage
 
-	supervisors map[string]*Sup
-	apiMap      map[int]*API
+	modManager map[string]*modManager
+	apiMap     map[int]*API
 }
 
 //global singleton router
 var router *Router
 var once sync.Once
 
-func newRouter(modId string, sup *Sup) *Router {
+func newRouter(modId string, modManager *modManager) *Router {
 
 	once.Do(func() {
 		router = &Router{}
 	})
 	router.init()
-
-	//todo : access supervisor by map or slice
-	// set a root supervisor
-	router.supervisors[modId] = sup
+	router.modManager[modId] = modManager
 	go router.run()
 	return router
 }
 
 func (r *Router) init() {
-	r.castRouter = make(chan *CastMessage, routerQueueSize)
+	r.asyncCallRouter = make(chan *AsyncCallMessage, routerQueueSize)
 	r.callRouter = make(chan *CallMessage)
-	r.supervisors = make(map[string]*Sup)
+	r.modManager = make(map[string]*modManager)
 	r.apiMap = make(map[int]*API)
 }
 func (r *Router) run() {
@@ -51,9 +48,6 @@ func (r *Router) run() {
 			mod := api.module
 			select {
 			case mod.buf <- true:
-				//fmt.Println("In ", mod.mid, ", the num of running gorouines : ", len(mod.buf))
-				/*api := r.getAPI(m.apiKey)
-				mod := api.module*/
 				mod.sup.callChan <- &CallMessage{
 					args:     m.args,
 					apiKey:   m.apiKey,
@@ -63,16 +57,12 @@ func (r *Router) run() {
 					buf:      mod.buf,
 				}
 			}
-		case m := <-r.castRouter:
-			//fmt.Println(m.apiKey, "cast received")
+		case m := <-r.asyncCallRouter:
 			api := r.getAPI(m.apiKey)
 			mod := api.module
 			select {
 			case mod.buf <- true:
-				//fmt.Println("In ", mod.mid, ", the num of running gorouines : ", len(mod.buf))
-				/*api := r.getAPI(m.apiKey)
-				mod := api.module*/
-				mod.sup.castChan <- &CastMessage{
+				mod.sup.asyncCallChan <- &AsyncCallMessage{
 					args:     m.args,
 					apiKey:   m.apiKey,
 					apiVal:   api.val,
@@ -88,8 +78,8 @@ func (r *Router) run() {
 	}
 }
 
-func cast(key int, args ...interface{}) {
-	router.castRouter <- &CastMessage{
+func asyncCall(key int, args ...interface{}) {
+	router.asyncCallRouter <- &AsyncCallMessage{
 		args:   args,
 		apiKey: key,
 	}
@@ -117,8 +107,8 @@ func (r *Router) getAPI(apiKey int) *API {
 
 }
 
-func Cast(key int, args ...interface{}) {
-	cast(key, args...)
+func AsyncCall(key int, args ...interface{}) {
+	asyncCall(key, args...)
 
 }
 

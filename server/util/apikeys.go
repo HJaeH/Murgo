@@ -14,7 +14,6 @@ const (
 	SetUserOption
 	RemoveClient
 	SendMessages
-	CheckUserDuplication
 )
 
 const (
@@ -29,6 +28,7 @@ const (
 	BroadcastChannel
 	AddChannel
 	BroadCastChannelWithoutMe
+	BroadCastVoiceToChannel
 )
 
 const ( // 401 ~
