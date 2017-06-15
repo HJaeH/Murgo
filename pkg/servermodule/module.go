@@ -6,9 +6,7 @@ import (
 )
 
 const (
-	single     = 1
-	multi      = 5
-	defaultBuf = 10
+	defaultBuf = 100
 )
 
 type ModCallback interface {
@@ -20,9 +18,9 @@ type Module struct {
 	sup *modManager
 	val reflect.Value
 
-	apis map[int]*API
-	sync chan bool
-	buf  chan bool
+	apis      map[int]*API
+	semaphore chan bool
+	buf       chan bool
 
 	//todo : 코드 개선
 	wg *sync.WaitGroup
@@ -58,7 +56,7 @@ type CallMessage struct {
 	reply    chan bool
 }
 
-func AddModule(smod ModManagerCallback, mod ModCallback, singleThreaed bool) {
+func AddModule(smod ModManagerCallback, mod ModCallback, semaphore int) {
 	//genserver에 module을 등록.
 	// get module name string
 
@@ -68,7 +66,7 @@ func AddModule(smod ModManagerCallback, mod ModCallback, singleThreaed bool) {
 	//set supervisor of new module
 	if sup, ok := router.modManager[smid]; ok {
 		router.modManager[mid] = sup
-		gen := newModule(smod, mod, singleThreaed)
+		gen := newModule(smod, mod, semaphore)
 		sup.addChild(mid, gen)
 	} else {
 		panic("Invalid supName")
@@ -77,9 +75,9 @@ func AddModule(smod ModManagerCallback, mod ModCallback, singleThreaed bool) {
 
 }
 
-func newModule(smod ModManagerCallback, mod ModCallback, sg bool) *Module {
+func newModule(smod ModManagerCallback, mod ModCallback, semaphore int) *Module {
 	gen := new(Module)
-	gen.init(smod, mod, sg)
+	gen.init(smod, mod, semaphore)
 	return gen
 }
 
@@ -104,48 +102,25 @@ func register(modName string, apiName string, apiKey int) {
 	sup, _ := router.modManager[modName]
 	mod := sup.child(modName)
 	apiVal := mod.val.MethodByName(apiName)
-	/*if mod.val.IsValid() == true {
-		fmt.Println(apiName, " is valid mod", modName)
-	}
-
-	if apiVal.IsValid() != true {
-		panic("invalid api value")
-	}*/
 	newAPI := newAPI(mod, apiVal, apiKey)
 
 	mod.apis[apiKey] = newAPI
 	router.apiMap[apiKey] = newAPI
-
-	/*if sup, ok := router.supervisors[modName]; !ok {
-		mod := sup.child(modName)
-
-		newAPI := new(API)
-		newAPI.val = mod.val.MethodByName(apiName)
-		mod.apis[apiKey] = newAPI
-		router.apiMap[apiKey] = newAPI
-		return
-	}
-	panic("Module is not registered")*/
 }
 
 func getMid(mod interface{}) string {
 	return reflect.TypeOf(mod).Elem().Name()
 }
 
-func (g *Module) init(smod ModManagerCallback, mod ModCallback, sg bool) {
-	//todo mid 추가 여부
+func (g *Module) init(modManager ModManagerCallback, mod ModCallback, semaphore int) {
 	mid := getMid(mod)
-	smid := getMid(smod)
+	mmid := getMid(modManager)
 
-	parent := router.modManager[smid]
+	parent := router.modManager[mmid]
 	g.wg = new(sync.WaitGroup)
 	//g.sync = make(chan bool, routeBufferPerModule)
 	g.buf = make(chan bool, defaultBuf)
-	if sg {
-		g.sync = make(chan bool, single)
-	} else {
-		g.sync = make(chan bool, multi)
-	}
+	g.semaphore = make(chan bool, semaphore)
 	g.apis = make(map[int]*API)
 	g.mid = mid
 	g.sup = parent

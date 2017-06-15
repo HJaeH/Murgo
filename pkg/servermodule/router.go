@@ -53,7 +53,7 @@ func (r *Router) run() {
 					apiKey:   m.apiKey,
 					reply:    m.reply,
 					apiVal:   api.val,
-					syncChan: mod.sync,
+					syncChan: mod.semaphore,
 					buf:      mod.buf,
 				}
 			}
@@ -66,7 +66,7 @@ func (r *Router) run() {
 					args:     m.args,
 					apiKey:   m.apiKey,
 					apiVal:   api.val,
-					syncChan: mod.sync,
+					syncChan: mod.semaphore,
 					buf:      mod.buf,
 				}
 			default:

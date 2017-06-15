@@ -1,5 +1,6 @@
 package util
 
+//todo : redis sample code
 //"github.com/go-redis/redis"
 //"fmt"
 

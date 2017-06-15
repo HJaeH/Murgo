@@ -175,13 +175,11 @@ func (s *SessionManager) SetUserOption(client *Client, userState *mumbleproto.Us
 }
 
 func (s *SessionManager) SendMessages(sessions []uint32, msg interface{}) {
-	fmt.Println("Sending text to", sessions)
 	for _, session := range sessions {
 		fmt.Println(session)
 		if client, ok := s.clientList[session]; ok {
 			client.sendMessage(msg)
 		} else {
-			fmt.Println(session, "=")
 			panic("session not exist")
 		}
 	}

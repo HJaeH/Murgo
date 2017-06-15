@@ -119,9 +119,7 @@ func (c *ChannelManager) channel(channelId uint32) (*Channel, error) {
 }
 
 func (c *ChannelManager) SendChannelList(client *Client) {
-	fmt.Println("send channel list :")
 	for _, eachChannel := range c.channelList {
-		fmt.Println(eachChannel.Name, "   === ")
 		client.sendMessage(eachChannel.toChannelState())
 	}
 }

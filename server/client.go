@@ -16,8 +16,6 @@ import (
 
 	"murgo/pkg/servermodule"
 
-	"fmt"
-
 	"github.com/golang/protobuf/proto"
 )
 
@@ -133,7 +131,6 @@ func (c *Client) sendMessage(msg interface{}) error {
 		if err != nil {
 			panic("error while unmarshalling")
 		}
-		fmt.Println(*userState.Session, "---  is sesison!@#!@#!@#")
 	}
 	//mutex.Unlock()
 

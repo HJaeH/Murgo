@@ -67,7 +67,6 @@ func (c *Channel) SendUserListInChannel(client *Client) {
 		if reflect.DeepEqual(eachUser, client) {
 			continue
 		}
-		fmt.Println("client list: ", client.UserName)
 		err := client.sendMessage(eachUser.toUserState())
 		if err != nil {
 			panic(" Error sending channel User list")

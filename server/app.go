@@ -27,5 +27,5 @@ func (m *ModManager) Init() {
 	servermodule.AddModule(m, new(SessionManager), 1)
 	servermodule.AddModule(m, new(ChannelManager), 1)
 	servermodule.AddModule(m, new(Server), 100)
-	servermodule.AddModule(m, new(MessageHandler), false)
+	servermodule.AddModule(m, new(MessageHandler), 5)
 }
