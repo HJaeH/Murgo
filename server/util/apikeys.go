@@ -5,8 +5,6 @@ const (
 	MessageHandler
 	ChannelManager
 	TlsServer
-
-	//
 )
 
 const (
@@ -14,6 +12,8 @@ const (
 	HandleIncomingClient = SessionManager + iota + 1
 	BroadcastMessage
 	SetUserOption
+	RemoveClient
+	SendMessages
 )
 
 const (
@@ -27,6 +27,8 @@ const (
 	EnterChannel
 	BroadcastChannel
 	AddChannel
+	BroadCastChannelWithoutMe
+	BroadCastVoiceToChannel
 )
 
 const ( // 401 ~

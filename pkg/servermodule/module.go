@@ -11,13 +11,13 @@ const (
 	defaultBuf = 10
 )
 
-type GenCallback interface {
+type ModCallback interface {
 	Init()
 }
 
-type GenServer struct {
+type Module struct {
 	mid string
-	sup *Sup
+	sup *modManager
 	val reflect.Value
 
 	apis map[int]*API
@@ -29,13 +29,13 @@ type GenServer struct {
 }
 
 type API struct {
-	module *GenServer
+	module *Module
 	name   string
 	val    reflect.Value
 	key    int
 }
 
-type CastMessage struct {
+type AsyncCallMessage struct {
 	apiVal reflect.Value
 	args   []interface{}
 	apiKey int
@@ -58,11 +58,7 @@ type CallMessage struct {
 	reply    chan bool
 }
 
-type CallReply struct {
-	result int
-}
-
-func StartLinkGenServer(smod SupCallback, mod GenCallback, singleThreaed bool) {
+func AddModule(smod ModManagerCallback, mod ModCallback, singleThreaed bool) {
 	//genserver에 module을 등록.
 	// get module name string
 
@@ -70,9 +66,9 @@ func StartLinkGenServer(smod SupCallback, mod GenCallback, singleThreaed bool) {
 	smid := getMid(smod)
 
 	//set supervisor of new module
-	if sup, ok := router.supervisors[smid]; ok {
-		router.supervisors[mid] = sup
-		gen := newGenServer(smod, mod, singleThreaed)
+	if sup, ok := router.modManager[smid]; ok {
+		router.modManager[mid] = sup
+		gen := newModule(smod, mod, singleThreaed)
 		sup.addChild(mid, gen)
 	} else {
 		panic("Invalid supName")
@@ -81,13 +77,13 @@ func StartLinkGenServer(smod SupCallback, mod GenCallback, singleThreaed bool) {
 
 }
 
-func newGenServer(smod SupCallback, mod GenCallback, sg bool) *GenServer {
-	gen := new(GenServer)
+func newModule(smod ModManagerCallback, mod ModCallback, sg bool) *Module {
+	gen := new(Module)
 	gen.init(smod, mod, sg)
 	return gen
 }
 
-func newAPI(mod *GenServer, val reflect.Value, apiKey int) *API {
+func newAPI(mod *Module, val reflect.Value, apiKey int) *API {
 	newAPI := new(API)
 	newAPI.module = mod
 	newAPI.val = val
@@ -105,7 +101,7 @@ func RegisterAPI(rawAPI interface{}, apiKey int) {
 
 func register(modName string, apiName string, apiKey int) {
 
-	sup, _ := router.supervisors[modName]
+	sup, _ := router.modManager[modName]
 	mod := sup.child(modName)
 	apiVal := mod.val.MethodByName(apiName)
 	/*if mod.val.IsValid() == true {
@@ -136,12 +132,12 @@ func getMid(mod interface{}) string {
 	return reflect.TypeOf(mod).Elem().Name()
 }
 
-func (g *GenServer) init(smod SupCallback, mod GenCallback, sg bool) {
+func (g *Module) init(smod ModManagerCallback, mod ModCallback, sg bool) {
 	//todo mid 추가 여부
 	mid := getMid(mod)
 	smid := getMid(smod)
 
-	parent := router.supervisors[smid]
+	parent := router.modManager[smid]
 	g.wg = new(sync.WaitGroup)
 	//g.sync = make(chan bool, routeBufferPerModule)
 	g.buf = make(chan bool, defaultBuf)
