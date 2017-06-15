@@ -11,18 +11,23 @@ import (
 
 type MessageHandler struct{}
 
-func (messageHandler *MessageHandler) HandleMassage(msg *Message) {
+type Message struct {
+	buf    []byte
+	kind   uint16
+	client *Client
+}
+
+func (messageHandler *MessageHandler) HandleMessage(msg *Message) {
 	switch msg.kind {
-	case mumbleproto.MessageAuthenticate:
-		messageHandler.handleAuthenticateMessage(msg)
+
 	case mumbleproto.MessagePing:
 		messageHandler.handlePingMessage(msg)
 	case mumbleproto.MessageChannelRemove:
 		messageHandler.handleChannelRemoveMessage(msg)
 	case mumbleproto.MessageChannelState:
 		messageHandler.handleChannelStateMessage(msg)
-	/*case mumbleproto.MessageUserState:
-	messageHandler.handleUserStateMessage(msg)*/
+	case mumbleproto.MessageUserState:
+		messageHandler.handleUserStateMessage(msg)
 	case mumbleproto.MessageUserRemove:
 		messageHandler.handleUserRemoveMessage(msg)
 	case mumbleproto.MessageBanList:
@@ -35,8 +40,8 @@ func (messageHandler *MessageHandler) HandleMassage(msg *Message) {
 		messageHandler.handleQueryUsers(msg)
 	case mumbleproto.MessageCryptSetup:
 		messageHandler.handleCryptSetup(msg)
-	case mumbleproto.MessageContextAction:
-		fmt.Print("MessageContextAction from client")
+	//case mumbleproto.MessageContextAction:
+	//	fmt.Print("MessageContextAction from client")
 	case mumbleproto.MessageUserList:
 		messageHandler.handleUserList(msg)
 	case mumbleproto.MessageVoiceTarget:
@@ -47,72 +52,8 @@ func (messageHandler *MessageHandler) HandleMassage(msg *Message) {
 		messageHandler.handleUserStatsMessage(msg)
 	case mumbleproto.MessageRequestBlob:
 		messageHandler.handleRequestBlob(msg)
-	}
-}
-
-////Authenticate message handling
-func (m *MessageHandler) handleAuthenticateMessage(msg *Message) {
-
-	authenticate := &mumbleproto.Authenticate{}
-	err := proto.Unmarshal(msg.buf, authenticate)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	fmt.Println("auth message:", authenticate, "msg id :", msg.testCounter, "from:", msg.client.UserName)
-
-	// crypto setup
-	client := msg.client
-
-	client.UserName = *authenticate.Username
-	client.cryptState.GenerateKey()
-	err = client.SendMessage(&mumbleproto.CryptSetup{
-		Key:         client.cryptState.Key(),
-		ClientNonce: client.cryptState.EncryptIV(),
-		ServerNonce: client.cryptState.DecryptIV(),
-	})
-	if err != nil {
-		fmt.Println("error sending msg")
-	}
-	client.codecs = authenticate.CeltVersions
-	if len(client.codecs) == 0 {
-		//todo : no codec msg case
-	}
-
-	//send codec version
-	err = client.SendMessage(&mumbleproto.CodecVersion{
-		Alpha:       proto.Int32(-2147483637),
-		Beta:        proto.Int32(-2147483632),
-		PreferAlpha: proto.Bool(false),
-		Opus:        proto.Bool(true),
-	})
-	if err != nil {
-		fmt.Println("error sending codec version")
-		return
-	}
-	/// send channel state
-	servermodule.Cast(APIkeys.SendChannelList, client)
-	// enter the root channel as default channel
-	fmt.Println("==========")
-	servermodule.Cast(APIkeys.EnterChannel, ROOT_CHANNEL, client)
-
-	sync := &mumbleproto.ServerSync{}
-	sync.Session = proto.Uint32(uint32(client.session))
-	sync.MaxBandwidth = proto.Uint32(72000)
-	sync.WelcomeText = proto.String("Welcome to murgo server")
-	if err := client.SendMessage(sync); err != nil {
-		fmt.Println("error sending message")
-		return
-	}
-
-	serverConfigMsg := &mumbleproto.ServerConfig{
-		AllowHtml:     proto.Bool(true),
-		MessageLength: proto.Uint32(128),
-		MaxBandwidth:  proto.Uint32(240000),
-	}
-	if err := client.SendMessage(serverConfigMsg); err != nil {
-		fmt.Println("error sending message")
-		return
+	default:
+		fmt.Println("uncategorized msg type :", msg.kind)
 	}
 }
 
@@ -123,35 +64,31 @@ func (m *MessageHandler) handlePingMessage(msg *Message) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("ping message:", ping, "msg id :", msg.testCounter, "from:", msg.client.UserName)
-
-	//fmt.Println("ping info:", ping, "msg id : ", msg.testCounter)
 	client := msg.client
-	client.SendMessage(&mumbleproto.Ping{
-		Timestamp: ping.Timestamp,
-		Good:      proto.Uint32(1),
-		Late:      proto.Uint32(1),
-		Lost:      proto.Uint32(1),
-		Resync:    proto.Uint32(1),
+	fmt.Println(ping)
+	client.sendMessage(&mumbleproto.Ping{
+		Timestamp:  ping.Timestamp,
+		TcpPackets: ping.TcpPackets,
+		TcpPingVar: ping.TcpPingVar,
+		TcpPingAvg: ping.TcpPingAvg,
 	})
+
 }
 
-func (messageHandler *MessageHandler) handleUserStateMessage(msg *Message) {
+func (m *MessageHandler) handleUserStateMessage(msg *Message) {
 
 	// 메시지를 보낸 유저 reset idle -> 이 부분은 통합
 	userState := &mumbleproto.UserState{}
 	err := proto.Unmarshal(msg.buf, userState)
 	if err != nil {
-		//
+		panic("error while unmarshalling")
 		return
 	}
-	fmt.Println("userstate info:", userState, "msg id :", msg.testCounter, "from:", msg.client.UserName)
 	//Channel ID 필드 값이 있는 경우
 	if userState.ChannelId != nil {
-		servermodule.Cast(APIkeys.EnterChannel, int(*userState.ChannelId), msg.client)
+		servermodule.Call(APIkeys.EnterChannel, *userState.ChannelId, msg.client)
 	}
-
-	servermodule.Cast(APIkeys.SetUserOption, userState)
+	//servermodule.Cast(APIkeys.SetUserOption, msg.client, userState)
 
 }
 
@@ -177,7 +114,7 @@ func (m *MessageHandler) handleUserStatsMessage(msg *Message) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("userstats info:", userStats, "from:", msg.client.UserName)
+	//fmt.Println("userstats info:", userStats, "from:", msg.client.UserName)
 	newUserStatsMsg := &mumbleproto.UserStats{
 		TcpPingAvg: proto.Float32(client.tcpPingAvg),
 		TcpPingVar: proto.Float32(client.tcpPingVar),
@@ -187,7 +124,7 @@ func (m *MessageHandler) handleUserStatsMessage(msg *Message) {
 		//Onlinesecs:
 		//Idlesecs:
 	}
-	client.SendMessage(newUserStatsMsg)
+	client.sendMessage(newUserStatsMsg)
 }
 
 // protocol handling dummy for UserRemoveMessage
@@ -215,6 +152,7 @@ func (m *MessageHandler) handleBanListMessage(msg *Message) {
 
 //TODO : deal with sending text message
 func (m *MessageHandler) handleTextMessage(msg *Message) {
+	client := msg.client
 	textMsg := &mumbleproto.TextMessage{}
 	err := proto.Unmarshal(msg.buf, textMsg)
 	if err != nil {
@@ -223,20 +161,21 @@ func (m *MessageHandler) handleTextMessage(msg *Message) {
 	}
 	fmt.Println("Text msg info:", textMsg, "from:", msg.client.UserName)
 
-	if textMsg.ChannelId != nil {
-		newMsg := mumbleproto.TextMessage{
-			Actor:     textMsg.Actor,
-			Session:   textMsg.Session,
-			ChannelId: textMsg.ChannelId,
-			Message:   textMsg.Message,
-		}
-
-		servermodule.Cast(APIkeys.BroadcastChannel, newMsg, int(textMsg.ChannelId[0]))
-
-	} else if textMsg.Session != nil {
-
+	//todo : 예외처리
+	/*if len(textMsg.Message) == 0 {
+		return
+	}*/
+	newMsg := &mumbleproto.TextMessage{
+		Actor:   proto.Uint32(client.Session()),
+		Message: textMsg.Message,
+	}
+	// send text message to channels
+	for _, eachChannelId := range textMsg.ChannelId {
+		servermodule.AsyncCall(APIkeys.BroadCastChannelWithoutMe, eachChannelId, client, newMsg)
 	}
 
+	// send text message to users
+	servermodule.AsyncCall(APIkeys.SendMessages, textMsg.Session, newMsg)
 }
 
 // protocol handling dummy for Aclmessage
@@ -291,7 +230,6 @@ func (m *MessageHandler) handleUserList(msg *Message) {
 }
 
 // protocol handling dummy for Voicetarget
-
 func (m *MessageHandler) handleVoiceTarget(msg *Message) {
 	msgProto := &mumbleproto.VoiceTarget{}
 	err := proto.Unmarshal(msg.buf, msgProto)
@@ -300,7 +238,6 @@ func (m *MessageHandler) handleVoiceTarget(msg *Message) {
 		return
 	}
 	fmt.Println("voice target info:", msgProto, "from:", msg.client.UserName)
-
 }
 
 // protocol handling dummy for PermissionQuery
@@ -345,7 +282,7 @@ func sendPermissionDenied(client *Client, denyType mumbleproto.PermissionDenied_
 		Type:    &denyType,
 	}
 	fmt.Println("Permission denied ", permissionDeniedMsg)
-	err := client.SendMessage(permissionDeniedMsg)
+	err := client.sendMessage(permissionDeniedMsg)
 	if err != nil {
 		fmt.Println("Error sending messsage")
 		return
@@ -354,6 +291,6 @@ func sendPermissionDenied(client *Client, denyType mumbleproto.PermissionDenied_
 }
 
 func (m *MessageHandler) Init() {
-	servermodule.RegisterAPI((*MessageHandler).HandleMassage, APIkeys.HandleMessage)
+	servermodule.RegisterAPI((*MessageHandler).HandleMessage, APIkeys.HandleMessage)
 
 }
