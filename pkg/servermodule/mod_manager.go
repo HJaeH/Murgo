@@ -47,11 +47,11 @@ func (m *modManager) run() {
 
 func (s *modManager) handleCallLoop() {
 	if s.isRunning {
+
 		panic("modManager is already runnning")
 	}
 	s.isRunning = true
 	for {
-		//todo : goroutine pool로 goroutine 필요할듯
 		select {
 
 		case msg := <-s.callChan:
@@ -83,20 +83,6 @@ func (m *modManager) handleCallAsync(msg *AsyncCallMessage) {
 
 }
 
-func doCall(val reflect.Value, args ...interface{}) {
-
-	if args == nil {
-		val.Call([]reflect.Value{})
-	} else {
-		inputs := make([]reflect.Value, len(args))
-		for i, _ := range args {
-			inputs[i] = reflect.ValueOf(args[i])
-		}
-
-		val.Call(inputs)
-	}
-}
-
 func (m *modManager) handleCall(msg *CallMessage) {
 	select {
 	//check whether this module is available now or not
@@ -117,6 +103,20 @@ func (m *modManager) handleCall(msg *CallMessage) {
 	}()
 }
 
+func doCall(val reflect.Value, args ...interface{}) []reflect.Value {
+
+	if args == nil {
+		return val.Call([]reflect.Value{})
+	} else {
+		inputs := make([]reflect.Value, len(args))
+		for i, _ := range args {
+			inputs[i] = reflect.ValueOf(args[i])
+		}
+
+		return val.Call(inputs)
+	}
+}
+
 func restart(module func()) {
 	if err := recover(); err != nil {
 		fmt.Println("Recovered from panic")
@@ -126,13 +126,11 @@ func restart(module func()) {
 
 func rawReqParser(rawAPI interface{}) (string, string) {
 
-	//returns string ex)main.(*B).A
+	//returns string like "main.(*B).A"
 	rawStr := runtime.FuncForPC(reflect.ValueOf(rawAPI).Pointer()).Name()
 	reqs := strings.Split(rawStr, ".")
 	modName := strings.Trim(reqs[len(reqs)-2], "(*)")
-
 	apiName := reqs[len(reqs)-1]
-
 	return modName, apiName
 }
 

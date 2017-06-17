@@ -9,7 +9,7 @@ import (
 	"murgo/pkg/mumbleproto"
 	"murgo/pkg/servermodule"
 
-	APIkeys "murgo/server/util"
+	"murgo/server/util/apikeys"
 	"net"
 
 	"mumble.info/grumble/pkg/packetdata"
@@ -24,14 +24,13 @@ func (s *Server) Accept() {
 	if err != nil {
 		fmt.Println(" Accepting a conneciton failed handling a client")
 	}
-	servermodule.AsyncCall(APIkeys.HandleIncomingClient, conn)
-	servermodule.AsyncCall(APIkeys.Accept)
-
+	servermodule.AsyncCall(apikeys.HandleIncomingClient, conn)
+	servermodule.AsyncCall(apikeys.Accept)
 }
 
 func (s *Server) Init() {
-	servermodule.RegisterAPI((*Server).Receive, APIkeys.Receive)
-	servermodule.RegisterAPI((*Server).Accept, APIkeys.Accept)
+	servermodule.RegisterAPI((*Server).Receive, apikeys.Receive)
+	servermodule.RegisterAPI((*Server).Accept, apikeys.Accept)
 	cer, err := tls.LoadX509KeyPair("./src/murgo/config/server.crt", "./src/murgo/config/server.key")
 	if err != nil {
 		fmt.Println(err)
@@ -46,7 +45,7 @@ func (s *Server) Init() {
 		return
 	}
 
-	servermodule.AsyncCall(APIkeys.Accept)
+	servermodule.AsyncCall(apikeys.Accept)
 }
 
 func (s *Server) terminate() {
@@ -73,7 +72,9 @@ func (s *Server) Receive(client *Client) {
 		}
 		if msg.kind == mumbleproto.MessageUDPTunnel {
 
+			//Do not send voice data to clients in root channel
 			//VoicelibTester client also check this, just to be sure.
+
 			if client.Channel.Id == ROOT_CHANNEL {
 				continue
 			} else {
@@ -83,7 +84,7 @@ func (s *Server) Receive(client *Client) {
 				}
 
 				kind := (msg.buf[0] >> 5) & 0x07
-				//fmt.Print(msg.buf, ", ")
+				fmt.Print(", ")
 				switch kind {
 
 				case mumbleproto.UDPMessageVoiceOpus:
@@ -97,15 +98,14 @@ func (s *Server) Receive(client *Client) {
 					incoming.Skip(size & 0x1fff)
 					outgoing.PutUint32(client.Session())
 					outgoing.PutBytes(buf[1 : 1+(len(buf)-1)])
-					outbuf[0] = buf[0] & 0xe0 // strip target
+					outbuf[0] = buf[0] & 0xe0 // strip target`
 
-					go client.Channel.BroadCastChannelWithoutMe(client, buf)
-					//servermodule.Cast(APIkeys.BroadCastVoiceToChannel, client, outbuf)
+					client.Channel.BroadCastChannelWithoutMe(client, buf)
 				}
 
 			}
 		} else {
-			servermodule.AsyncCall(APIkeys.HandleMessage, msg)
+			servermodule.AsyncCall(apikeys.HandleMessage, msg)
 		}
 	}
 }

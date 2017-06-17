@@ -88,6 +88,16 @@ func (c *Channel) BroadCastChannelWithoutMe(me *Client, msg interface{}) {
 	}
 }
 
+func (c *Channel) currentSpeakerCount() int {
+	count := 0
+	for _, session := range c.clients {
+		if session.mute == false {
+			count++
+		}
+	}
+	return count
+}
+
 //callback
 func (c *Channel) Init() {
 

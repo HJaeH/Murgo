@@ -1,11 +1,10 @@
-package util
+package redis
 
 //todo : redis sample code
 //"github.com/go-redis/redis"
 //"fmt"
 
 /*
-
 func ExampleClient() {
 	client := redis.NewClient(&redis.Options{
 		Addr:     "localhost:6379",

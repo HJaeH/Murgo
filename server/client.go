@@ -10,11 +10,13 @@ import (
 
 	"murgo/config"
 	"murgo/pkg/mumbleproto"
-	APIkeys "murgo/server/util"
+	"murgo/server/util/apikeys"
 
 	"time"
 
 	"murgo/pkg/servermodule"
+
+	"fmt"
 
 	"github.com/golang/protobuf/proto"
 )
@@ -33,10 +35,11 @@ type Client struct {
 
 	bandWidth *BandWidth
 	//user's setting
-	selfDeaf   bool
-	selfMute   bool
-	mute       bool
-	deaf       bool
+	selfDeaf bool
+	selfMute bool
+	mute     bool
+	deaf     bool
+
 	tcpPingAvg float32
 	tcpPingVar float32
 	tcpPackets uint32
@@ -56,8 +59,11 @@ type Client struct {
 
 	//version
 	version uint32
-	//for test
-	testCounter int
+
+	prioritySpeaker    bool
+	channelOwner       bool
+	existUsableMic     bool
+	existUsableSpeaker bool
 }
 
 // called at session manager
@@ -73,8 +79,6 @@ func newClient(conn *net.Conn, session uint32) *Client {
 	client.conn = conn
 	client.session = session
 	client.reader = bufio.NewReader(*client.conn)
-
-	client.testCounter = 0
 
 	// 기본으로 루트채널에 할당
 	client.Channel = nil
@@ -96,6 +100,10 @@ func (c *Client) sendMessage(msg interface{}) error {
 	if kind == mumbleproto.MessageUDPTunnel {
 		msgData = msg.([]byte)
 	} else {
+		if kind == mumbleproto.MessageUserState {
+			fmt.Println("userstate")
+
+		}
 
 		protoMsg, ok := (msg).(proto.Message)
 		if !ok {
@@ -139,7 +147,7 @@ func (c *Client) sendMessage(msg interface{}) error {
 
 func (c *Client) sendMessageWithInterval(msg interface{}) error {
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	buf := new(bytes.Buffer)
 	var (
 		kind    uint16
@@ -150,7 +158,7 @@ func (c *Client) sendMessageWithInterval(msg interface{}) error {
 	kind = mumbleproto.MessageType(msg)
 	if kind == mumbleproto.MessageUDPTunnel {
 		msgData = msg.([]byte)
-		//fmt.Print(msgData, " ")
+		fmt.Print(msgData, " ")
 	} else {
 		protoMsg, ok := (msg).(proto.Message)
 		if !ok {
@@ -220,7 +228,7 @@ func (c *Client) Disconnect() {
 	if !c.disconnected {
 		c.disconnected = true
 		(*c.conn).Close()
-		servermodule.AsyncCall(APIkeys.RemoveClient, c)
+		servermodule.AsyncCall(apikeys.RemoveClient, c)
 	}
 }
 
@@ -256,4 +264,13 @@ func (c *Client) reject(rejectType mumbleproto.Reject_RejectType, reason string)
 	})
 
 	c.Disconnect()
+}
+
+func (c *Client) sendPermissionDenied(denyType mumbleproto.PermissionDenied_DenyType) error {
+	permissionDeniedMsg := &mumbleproto.PermissionDenied{
+		Session: proto.Uint32(c.Session()),
+		Type:    &denyType,
+	}
+	fmt.Println("Permission denied ", permissionDeniedMsg)
+	return c.sendMessage(permissionDeniedMsg)
 }

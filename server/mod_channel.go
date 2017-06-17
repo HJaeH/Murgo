@@ -8,7 +8,9 @@ import (
 
 	"murgo/pkg/mumbleproto"
 	"murgo/pkg/servermodule"
-	APIkeys "murgo/server/util"
+	"murgo/server/util/apikeys"
+	"murgo/server/util/log"
+
 	"reflect"
 )
 
@@ -23,18 +25,16 @@ type ChannelManager struct {
 }
 
 func (c *ChannelManager) Init() {
-	servermodule.RegisterAPI((*ChannelManager).SendChannelList, APIkeys.SendChannelList)
-	servermodule.RegisterAPI((*ChannelManager).EnterChannel, APIkeys.EnterChannel)
-	servermodule.RegisterAPI((*ChannelManager).BroadCastChannel, APIkeys.BroadcastChannel)
-	servermodule.RegisterAPI((*ChannelManager).AddChannel, APIkeys.AddChannel)
-	servermodule.RegisterAPI((*ChannelManager).BroadCastChannelWithoutMe, APIkeys.BroadCastChannelWithoutMe)
-	servermodule.RegisterAPI((*ChannelManager).BroadCastVoiceToChannel, APIkeys.BroadCastVoiceToChannel)
-
-	//assign heap
-
+	servermodule.RegisterAPI((*ChannelManager).SendChannelList, apikeys.SendChannelList)
+	servermodule.RegisterAPI((*ChannelManager).EnterChannel, apikeys.EnterChannel)
+	servermodule.RegisterAPI((*ChannelManager).BroadCastChannel, apikeys.BroadcastChannel)
+	servermodule.RegisterAPI((*ChannelManager).AddChannel, apikeys.AddChannel)
+	servermodule.RegisterAPI((*ChannelManager).BroadCastChannelWithoutMe, apikeys.BroadCastChannelWithoutMe)
+	servermodule.RegisterAPI((*ChannelManager).BroadCastVoiceToChannel, apikeys.BroadCastVoiceToChannel)
 	c.init()
 
 }
+
 func (c *ChannelManager) init() {
 	c.channelList = make(map[uint32]*Channel)
 
@@ -47,38 +47,32 @@ func (c *ChannelManager) init() {
 	c.nextChannelID = ROOT_CHANNEL + 1
 }
 
-func (c *ChannelManager) AddChannel(channelName string, client *Client) {
-	for _, eachChannel := range c.channelList {
-		if eachChannel.Name == channelName {
-			//todo : client object 없에는 과정
-			//sendPermissionDenied(client, mumbleproto.PermissionDenied_ChannelName)
-			fmt.Println("duplicated channel name")
-			return
+func (c *ChannelManager) AddChannel(channelName string, client *Client) error {
+
+	if check := c.checkChannelNameDuplication(channelName); check {
+		if err := client.sendPermissionDenied(mumbleproto.PermissionDenied_ChannelName); err != nil {
+			return log.Error(err)
 		}
 	}
+
 	// create new channel
 	channel := NewChannel(c.nextChannelID, channelName)
-	c.nextChannelID++
 	c.channelList[channel.Id] = channel
 
 	//let all session know the created channel
-	channelStateMsg := channel.toChannelState()
+	servermodule.AsyncCall(apikeys.BroadcastMessage, channel.toChannelState())
 
-	servermodule.AsyncCall(APIkeys.BroadcastMessage, channelStateMsg)
 	//let the channel creator enter the channel
 	c.EnterChannel(channel.Id, client)
+
+	c.nextChannelID++
+	return nil
 
 }
 
 func (c *ChannelManager) RootChannel() *Channel {
 	return c.channelList[ROOT_CHANNEL]
 }
-
-func (c *ChannelManager) exitChannel(client *Client, channel *Channel) {
-
-}
-
-//broadcast a msg to all users in a channel
 
 func (c *ChannelManager) BroadCastChannel(channelId uint32, msg interface{}) {
 
@@ -97,7 +91,6 @@ func (c *ChannelManager) BroadCastChannelWithoutMe(channelId uint32, me *Client,
 	if err != nil {
 		fmt.Println(err)
 	}
-	//fmt.Println(channel.clients)
 	for _, eachClient := range channel.clients {
 		if reflect.DeepEqual(me, eachClient) {
 			continue
@@ -154,11 +147,6 @@ func (c *ChannelManager) EnterChannel(channelId uint32, client *Client) {
 		//c.BroadCastChannel(oldChannel.Id, userState)
 	}
 
-	userState.Mute = proto.Bool(false)
-	userState.Deaf = proto.Bool(false)
-	userState.SelfMute = proto.Bool(false)
-	userState.SelfDeaf = proto.Bool(false)
-	userState.Suppress = proto.Bool(false)
 	//새 채널에 알림
 	if newChannel.Id != ROOT_CHANNEL {
 		//새 채널입장을 채널 유저들에게 알림
@@ -186,35 +174,41 @@ func (c *ChannelManager) removeChannel(tempChannel interface{}) {
 		return
 	}
 
-	// Remove all clients in the channel to root
+	// move all clients in the channel to root
 	for _, client := range channel.clients {
 		userStateMsg := &mumbleproto.UserState{}
 		userStateMsg.Session = proto.Uint32(client.Session())
 		userStateMsg.ChannelId = proto.Uint32(ROOT_CHANNEL)
 		c.EnterChannel(ROOT_CHANNEL, client)
-
-		//channelManager.Call(channelManager.supervisor.sessionManager)
-		servermodule.AsyncCall(APIkeys.BroadcastMessage, userStateMsg)
+		servermodule.AsyncCall(apikeys.BroadcastMessage, userStateMsg)
 	}
 
 	// Remove the channel itself
 	rootChannel, err := c.channel(ROOT_CHANNEL)
 	if err != nil {
-		panic("Root doesn't exist")
+		log.Panic("Root doesn't exist")
 	}
 	delete(c.channelList, channel.Id)
 	delete(rootChannel.children, int(channel.Id))
-
 	channelRemoveMsg := &mumbleproto.ChannelRemove{
 		ChannelId: proto.Uint32(channel.Id),
 	}
-	servermodule.AsyncCall(APIkeys.BroadcastMessage, channelRemoveMsg)
+	servermodule.AsyncCall(apikeys.BroadcastMessage, channelRemoveMsg)
 }
 
 func (c *ChannelManager) BroadCastVoiceToChannel(client *Client, voiceData []byte) {
 	channel := client.Channel
 
 	c.BroadCastChannelWithoutMe(channel.Id, client, voiceData)
+}
+
+func (c *ChannelManager) checkChannelNameDuplication(channelName string) bool {
+	for _, eachChannel := range c.channelList {
+		if eachChannel.Name == channelName {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *ChannelManager) printChannels() {

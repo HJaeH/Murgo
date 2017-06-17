@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"murgo/pkg/mumbleproto"
 	"murgo/pkg/servermodule"
-	APIkeys "murgo/server/util"
+	"murgo/server/util/apikeys"
+	"murgo/server/util/log"
+
+	"murgo/config"
 
 	"github.com/golang/protobuf/proto"
 )
@@ -18,10 +21,10 @@ type Message struct {
 }
 
 func (messageHandler *MessageHandler) HandleMessage(msg *Message) {
+	var err error
 	switch msg.kind {
-
 	case mumbleproto.MessagePing:
-		messageHandler.handlePingMessage(msg)
+		err = messageHandler.handlePingMessage(msg)
 	case mumbleproto.MessageChannelRemove:
 		messageHandler.handleChannelRemoveMessage(msg)
 	case mumbleproto.MessageChannelState:
@@ -30,10 +33,12 @@ func (messageHandler *MessageHandler) HandleMessage(msg *Message) {
 		messageHandler.handleUserStateMessage(msg)
 	case mumbleproto.MessageUserRemove:
 		messageHandler.handleUserRemoveMessage(msg)
-	case mumbleproto.MessageBanList:
-		messageHandler.handleBanListMessage(msg)
 	case mumbleproto.MessageTextMessage:
 		messageHandler.handleTextMessage(msg)
+	case mumbleproto.MessageUserStats:
+		messageHandler.handleUserStatsMessage(msg)
+
+	/* 	todo : 코드 정리
 	case mumbleproto.MessageACL:
 		messageHandler.handleAclMessage(msg)
 	case mumbleproto.MessageQueryUsers:
@@ -48,24 +53,26 @@ func (messageHandler *MessageHandler) HandleMessage(msg *Message) {
 		messageHandler.handleVoiceTarget(msg)
 	case mumbleproto.MessagePermissionQuery:
 		messageHandler.handlePermissionQuery(msg)
-	case mumbleproto.MessageUserStats:
-		messageHandler.handleUserStatsMessage(msg)
 	case mumbleproto.MessageRequestBlob:
 		messageHandler.handleRequestBlob(msg)
+	case mumbleproto.MessageBanList:
+		messageHandler.handleBanListMessage(msg)
+	*/
 	default:
-		fmt.Println("uncategorized msg type :", msg.kind)
+		err = log.Error("Uncategorized msg type", msg.kind)
+	}
+	if err != nil {
+		log.ErrorP(err)
 	}
 }
 
-func (m *MessageHandler) handlePingMessage(msg *Message) {
+func (m *MessageHandler) handlePingMessage(msg *Message) error {
 	ping := &mumbleproto.Ping{}
 	err := proto.Unmarshal(msg.buf, ping)
 	if err != nil {
-		fmt.Println(err)
-		return
+		return err
 	}
 	client := msg.client
-	fmt.Println(ping)
 	client.sendMessage(&mumbleproto.Ping{
 		Timestamp:  ping.Timestamp,
 		TcpPackets: ping.TcpPackets,
@@ -73,22 +80,160 @@ func (m *MessageHandler) handlePingMessage(msg *Message) {
 		TcpPingAvg: ping.TcpPingAvg,
 	})
 
+	return nil
+
 }
 
-func (m *MessageHandler) handleUserStateMessage(msg *Message) {
+func (m *MessageHandler) handleUserStateMessage(msg *Message) error {
 
 	// 메시지를 보낸 유저 reset idle -> 이 부분은 통합
 	userState := &mumbleproto.UserState{}
 	err := proto.Unmarshal(msg.buf, userState)
 	if err != nil {
-		panic("error while unmarshalling")
-		return
+		return err
 	}
-	//Channel ID 필드 값이 있는 경우
-	if userState.ChannelId != nil {
-		servermodule.Call(APIkeys.EnterChannel, *userState.ChannelId, msg.client)
+	fmt.Println(userState)
+
+	actor := msg.client
+	targetSession := userState.GetSession()
+
+	// deaf, suppress, priority_speaker는 변경할 수 없다.
+	if userState.Deaf != nil ||
+		userState.Suppress != nil ||
+		userState.PrioritySpeaker != nil {
+		if err := actor.sendPermissionDenied(mumbleproto.PermissionDenied_Permission); err != nil {
+			return err
+		}
+		return nil
 	}
-	//servermodule.Cast(APIkeys.SetUserOption, msg.client, userState)
+	// case A. 자기자신에게 보내는 경우 - 채널 이동, 상태변경
+	if actor.Session() == targetSession {
+		target := actor
+		//case A1. enter channel
+		if userState.ChannelId != nil {
+			//todo: call or asyncall
+			servermodule.AsyncCall(apikeys.EnterChannel, *userState.ChannelId, actor)
+			return nil
+		}
+		//case A2. update my userState in root channel
+		if target.Channel.Id == ROOT_CHANNEL {
+			if userState.ExistUsableMic != nil &&
+				userState.ExistUsableSpeaker != nil {
+				// 디바이스 상태를 갱신할 수 있다.
+				// 응답은 액터에게만 한다.
+				target.existUsableMic = userState.GetExistUsableMic()
+				target.existUsableSpeaker = userState.GetExistUsableSpeaker()
+
+				// 유저에게 변경된 유저상태 전송
+				if err := target.sendMessageWithInterval(userState); err != nil {
+					log.Error(err)
+				}
+			} else {
+				// 디바이스 상태 이외의 갱신은 허가하지 않는다.
+				if err := target.sendPermissionDenied(mumbleproto.PermissionDenied_Permission); err != nil {
+					log.Error(err)
+				}
+			}
+			return nil
+		}
+		//case A3. update my userState in normal channel
+		if userState.Mute != nil {
+			// 나의 말하기 권한을 획득하려고 할 경우,
+			if userState.GetMute() == false {
+				// 나의 마이크와 스피커가 사용가능해위야 하며,
+				if !actor.existUsableMic ||
+					!actor.existUsableSpeaker {
+					if err := target.sendPermissionDenied(mumbleproto.PermissionDenied_Permission); err != nil {
+						log.Error(err)
+					}
+					return nil
+				}
+				// 채널의 말하기 권한 유저수가 최대치를 넘지 않았을 경우 가능하다.
+				if actor.Channel.currentSpeakerCount() >= config.MaxSpeaker {
+					if err := target.sendPermissionDenied(mumbleproto.PermissionDenied_Permission); err != nil {
+						log.Error(err)
+					}
+					return nil
+				}
+				// 말하기 권한 획득
+				actor.mute = false
+				servermodule.AsyncCall(apikeys.BroadcastChannel, actor.Channel.Id, userState)
+			} else {
+				// 나의 말하기 권한 포기
+				target.mute = true
+				servermodule.AsyncCall(apikeys.BroadcastChannel, actor.Channel.Id, userState)
+
+			}
+			return nil
+		}
+
+		//case A4.
+		changed := false
+		if userState.ExistUsableMic != nil {
+			target.existUsableMic = userState.GetExistUsableMic()
+			changed = true
+		}
+		if userState.ExistUsableSpeaker != nil {
+			target.existUsableSpeaker = userState.GetExistUsableSpeaker()
+			changed = true
+		}
+		if userState.SelfDeaf != nil {
+			target.selfDeaf = userState.GetSelfDeaf()
+			changed = true
+		}
+		if userState.SelfMute != nil {
+			target.selfMute = userState.GetSelfMute()
+			changed = true
+		}
+
+		// 채널에 있는 모든 유저에게 변경된 상태 브로드캐스트
+		if changed {
+			servermodule.AsyncCall(apikeys.BroadcastChannel, actor.Channel.Id, userState)
+		} else {
+			if err := target.sendPermissionDenied(mumbleproto.PermissionDenied_Permission); err != nil {
+				return err
+			}
+		}
+
+	} else { //case B. 타인에게 보내는 경우 -
+		/*if userState.GetMute() == true {
+			if err := target.sendPermissionDenied(mumbleproto.PermissionDenied_Permission); err != nil {
+				return err
+			}
+		}
+
+		// 다른 유저에게 말하기 권한을 양도할 수 있다.
+		if userState.GetMute() == false {
+			// 내가 말하기 권한이 있는 경우에만 양도 가능
+			if target.user.existUsableMic &&
+				target.user.existUsableSpeaker &&
+				actor.user.mute == false {
+				// 나의 말하기 권한을 막고
+				actor.user.mute = true
+				newUserState := &mumble.UserState{
+					Session: proto.Uint32(actor.sessionID),
+					Actor:   proto.Uint32(actor.sessionID),
+					Mute:    proto.Bool(true),
+				}
+				if err := o.server.channelManager.BroadcastToChannel(actor.channel, newUserState, nil); err != nil {
+					log.Error(err)
+					return
+				}
+				// 다른 유저의 말하기 권한 할당
+				target.user.mute = true
+				newUserState.Session = proto.Uint32(target.sessionID)
+				newUserState.Actor = proto.Uint32(target.sessionID)
+				newUserState.Mute = proto.Bool(false)
+				if err := o.server.channelManager.BroadcastToChannel(target.channel, newUserState, nil); err != nil {
+					log.Error(err)
+					return
+				}
+			}
+			return
+		}*/
+	}
+
+	return nil
 
 }
 
@@ -103,7 +248,7 @@ func (m *MessageHandler) handleChannelStateMessage(tempMsg interface{}) {
 	}
 	fmt.Println("ChannelState info:", channelStateMsg, "from:", msg.client.UserName)
 	if channelStateMsg.ChannelId == nil && channelStateMsg.Name != nil && *channelStateMsg.Temporary == true && *channelStateMsg.Parent == 0 && *channelStateMsg.Position == 0 {
-		servermodule.Call(APIkeys.AddChannel, *channelStateMsg.Name, msg.client)
+		servermodule.Call(apikeys.AddChannel, *channelStateMsg.Name, msg.client)
 	}
 }
 func (m *MessageHandler) handleUserStatsMessage(msg *Message) {
@@ -138,18 +283,6 @@ func (messageHandler *MessageHandler) handleUserRemoveMessage(msg *Message) {
 	fmt.Println("userRemoveMessage info:", msgProto, "from:", msg.client.UserName)
 }
 
-// protocol handling dummy for banlist message
-func (m *MessageHandler) handleBanListMessage(msg *Message) {
-
-	msgProto := &mumbleproto.BanList{}
-	err := proto.Unmarshal(msg.buf, msgProto)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	fmt.Println("Banlist message info:", msgProto, "from:", msg.client.UserName)
-}
-
 //TODO : deal with sending text message
 func (m *MessageHandler) handleTextMessage(msg *Message) {
 	client := msg.client
@@ -171,11 +304,11 @@ func (m *MessageHandler) handleTextMessage(msg *Message) {
 	}
 	// send text message to channels
 	for _, eachChannelId := range textMsg.ChannelId {
-		servermodule.AsyncCall(APIkeys.BroadCastChannelWithoutMe, eachChannelId, client, newMsg)
+		servermodule.AsyncCall(apikeys.BroadCastChannelWithoutMe, eachChannelId, client, newMsg)
 	}
 
 	// send text message to users
-	servermodule.AsyncCall(APIkeys.SendMessages, textMsg.Session, newMsg)
+	servermodule.AsyncCall(apikeys.SendMessages, textMsg.Session, newMsg)
 }
 
 // protocol handling dummy for Aclmessage
@@ -202,6 +335,18 @@ func (m *MessageHandler) handleQueryUsers(msg *Message) {
 	}
 	fmt.Println("Handle query users  :", msgProto, "from:", msg.client.UserName)
 
+}
+
+// protocol handling dummy for banlist message
+func (m *MessageHandler) handleBanListMessage(msg *Message) {
+
+	msgProto := &mumbleproto.BanList{}
+	err := proto.Unmarshal(msg.buf, msgProto)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("Banlist message info:", msgProto, "from:", msg.client.UserName)
 }
 
 // protocol handling dummy for CtyptSetup
@@ -274,23 +419,7 @@ func (m *MessageHandler) handleChannelRemoveMessage(msg *Message) {
 	fmt.Println("channel remove info:", msgProto, "from:", msg.client.UserName)
 }
 
-// TODO : permission 처리 나누어서 구현
-// Send message when permission denied
-func sendPermissionDenied(client *Client, denyType mumbleproto.PermissionDenied_DenyType) {
-	permissionDeniedMsg := &mumbleproto.PermissionDenied{
-		Session: proto.Uint32(client.Session()),
-		Type:    &denyType,
-	}
-	fmt.Println("Permission denied ", permissionDeniedMsg)
-	err := client.sendMessage(permissionDeniedMsg)
-	if err != nil {
-		fmt.Println("Error sending messsage")
-		return
-	}
-
-}
-
 func (m *MessageHandler) Init() {
-	servermodule.RegisterAPI((*MessageHandler).HandleMessage, APIkeys.HandleMessage)
+	servermodule.RegisterAPI((*MessageHandler).HandleMessage, apikeys.HandleMessage)
 
 }

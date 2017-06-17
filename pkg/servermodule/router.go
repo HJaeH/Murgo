@@ -112,6 +112,7 @@ func AsyncCall(key int, args ...interface{}) {
 
 }
 
+//todo : return result - issue : specifying return value type.
 func Call(key int, args ...interface{}) {
 	call(key, args...)
 }

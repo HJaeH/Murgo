@@ -1,31 +1,34 @@
 package server
 
 import (
-	"errors"
+	"fmt"
+	"murgo/config"
 	"murgo/pkg/servermodule"
 )
 
 type ModManager struct{}
 
 func Start() {
+
 	servermodule.Start(new(ModManager)) // root supervisor
 }
-
-func (m *ModManager) Terminate() error {
-	// todo : terminate
-	return errors.New("Error")
-}
-
 func Terminate() error {
-	err := errors.New("terminate")
-	return err
+
+	return nil
 }
 
 //callback
 func (m *ModManager) Init() {
+
 	//server modules
 	servermodule.AddModule(m, new(SessionManager), 1)
 	servermodule.AddModule(m, new(ChannelManager), 1)
 	servermodule.AddModule(m, new(Server), 100)
 	servermodule.AddModule(m, new(MessageHandler), 5)
+	fmt.Println(config.AppName, "is running now")
+}
+
+func (m *ModManager) Terminate() error {
+
+	return nil
 }

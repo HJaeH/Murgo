@@ -1,1 +1,2 @@
-The server module of voice chat application written in Go
+The voice chat server of mumble application written in Go
+
