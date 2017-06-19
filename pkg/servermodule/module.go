@@ -86,10 +86,9 @@ func newAPI(mod *Module, val reflect.Value, apiKey int) *API {
 	newAPI.module = mod
 	newAPI.val = val
 	newAPI.key = apiKey
-
 	return newAPI
-
 }
+
 func RegisterAPI(rawAPI interface{}, apiKey int) {
 	modName, apiName := rawReqParser(rawAPI)
 	//fmt.Println(modName, apiName, apiKey, "-------")

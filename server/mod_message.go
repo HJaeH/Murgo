@@ -85,6 +85,7 @@ func (m *MessageHandler) handlePingMessage(msg *Message) error {
 }
 
 func (m *MessageHandler) handleUserStateMessage(msg *Message) error {
+	fmt.Println("first!!@#")
 
 	// 메시지를 보낸 유저 reset idle -> 이 부분은 통합
 	userState := &mumbleproto.UserState{}
@@ -111,8 +112,7 @@ func (m *MessageHandler) handleUserStateMessage(msg *Message) error {
 		target := actor
 		//case A1. enter channel
 		if userState.ChannelId != nil {
-			//todo: call or asyncall
-			servermodule.AsyncCall(apikeys.EnterChannel, *userState.ChannelId, actor)
+			servermodule.Call(apikeys.EnterChannel, *userState.ChannelId, actor)
 			return nil
 		}
 		//case A2. update my userState in root channel
@@ -125,7 +125,7 @@ func (m *MessageHandler) handleUserStateMessage(msg *Message) error {
 				target.existUsableSpeaker = userState.GetExistUsableSpeaker()
 
 				// 유저에게 변경된 유저상태 전송
-				if err := target.sendMessageWithInterval(userState); err != nil {
+				if err := target.sendMessage(userState); err != nil {
 					log.Error(err)
 				}
 			} else {
@@ -134,6 +134,7 @@ func (m *MessageHandler) handleUserStateMessage(msg *Message) error {
 					log.Error(err)
 				}
 			}
+			fmt.Println("first")
 			return nil
 		}
 		//case A3. update my userState in normal channel
@@ -283,7 +284,6 @@ func (messageHandler *MessageHandler) handleUserRemoveMessage(msg *Message) {
 	fmt.Println("userRemoveMessage info:", msgProto, "from:", msg.client.UserName)
 }
 
-//TODO : deal with sending text message
 func (m *MessageHandler) handleTextMessage(msg *Message) {
 	client := msg.client
 	textMsg := &mumbleproto.TextMessage{}

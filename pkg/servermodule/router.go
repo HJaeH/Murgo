@@ -58,8 +58,10 @@ func (r *Router) run() {
 				}
 			}
 		case m := <-r.asyncCallRouter:
+
 			api := r.getAPI(m.apiKey)
 			mod := api.module
+			fmt.Println(mod.mid, len(mod.semaphore), len(mod.buf))
 			select {
 			case mod.buf <- true:
 				mod.sup.asyncCallChan <- &AsyncCallMessage{

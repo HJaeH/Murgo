@@ -78,13 +78,13 @@ func (s *Server) Receive(client *Client) {
 			if client.Channel.Id == ROOT_CHANNEL {
 				continue
 			} else {
+				//fmt.Print(".")
 				buf := msg.buf
 				if len(buf) == 0 {
 					return
 				}
 
 				kind := (msg.buf[0] >> 5) & 0x07
-				fmt.Print(", ")
 				switch kind {
 
 				case mumbleproto.UDPMessageVoiceOpus:
@@ -99,8 +99,9 @@ func (s *Server) Receive(client *Client) {
 					outgoing.PutUint32(client.Session())
 					outgoing.PutBytes(buf[1 : 1+(len(buf)-1)])
 					outbuf[0] = buf[0] & 0xe0 // strip target`
+					buf := outbuf[0 : 1+outgoing.Size()]
 
-					client.Channel.BroadCastChannelWithoutMe(client, buf)
+					go client.Channel.BroadCastChannelWithoutMe(client, buf)
 				}
 
 			}

@@ -12,8 +12,6 @@ import (
 	"murgo/pkg/mumbleproto"
 	"murgo/server/util/apikeys"
 
-	"time"
-
 	"murgo/pkg/servermodule"
 
 	"fmt"
@@ -100,66 +98,6 @@ func (c *Client) sendMessage(msg interface{}) error {
 	if kind == mumbleproto.MessageUDPTunnel {
 		msgData = msg.([]byte)
 	} else {
-		if kind == mumbleproto.MessageUserState {
-			fmt.Println("userstate")
-
-		}
-
-		protoMsg, ok := (msg).(proto.Message)
-		if !ok {
-			return errors.New("client: exepcted a proto.Message")
-		}
-		msgData, err = proto.Marshal(protoMsg)
-		if err != nil {
-			return err
-		}
-	}
-
-	err = binary.Write(buf, binary.BigEndian, kind)
-	if err != nil {
-		return err
-	}
-	err = binary.Write(buf, binary.BigEndian, uint32(len(msgData)))
-	if err != nil {
-		return err
-	}
-	_, err = buf.Write(msgData)
-	if err != nil {
-		return err
-	}
-	//mutex.Lock()
-	_, err = (*c.conn).Write(buf.Bytes())
-	if err != nil {
-		return err
-	}
-
-	if kind == mumbleproto.MessageUserState {
-		userState := &mumbleproto.UserState{}
-		err := proto.Unmarshal(msgData, userState)
-		if err != nil {
-			panic("error while unmarshalling")
-		}
-	}
-	//mutex.Unlock()
-
-	return nil
-}
-
-func (c *Client) sendMessageWithInterval(msg interface{}) error {
-
-	time.Sleep(10 * time.Millisecond)
-	buf := new(bytes.Buffer)
-	var (
-		kind    uint16
-		msgData []byte
-		err     error
-	)
-
-	kind = mumbleproto.MessageType(msg)
-	if kind == mumbleproto.MessageUDPTunnel {
-		msgData = msg.([]byte)
-		fmt.Print(msgData, " ")
-	} else {
 		protoMsg, ok := (msg).(proto.Message)
 		if !ok {
 			return errors.New("client: exepcted a proto.Message")
@@ -185,13 +123,11 @@ func (c *Client) sendMessageWithInterval(msg interface{}) error {
 	_, err = (*c.conn).Write(buf.Bytes())
 	if err != nil {
 		return err
-
 	}
 
 	return nil
 }
 
-//
 func (c *Client) readProtoMessage() (msg *Message, err error) {
 	var (
 		length uint32
@@ -271,6 +207,6 @@ func (c *Client) sendPermissionDenied(denyType mumbleproto.PermissionDenied_Deny
 		Session: proto.Uint32(c.Session()),
 		Type:    &denyType,
 	}
-	fmt.Println("Permission denied ", permissionDeniedMsg)
+	fmt.Println("Permission denied", permissionDeniedMsg)
 	return c.sendMessage(permissionDeniedMsg)
 }

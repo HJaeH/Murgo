@@ -49,7 +49,6 @@ func (s *SessionManager) RemoveClient(client *Client) {
 func (s *SessionManager) Init() {
 	servermodule.RegisterAPI((*SessionManager).HandleIncomingClient, apikeys.HandleIncomingClient)
 	servermodule.RegisterAPI((*SessionManager).BroadcastMessage, apikeys.BroadcastMessage)
-	//servermodule.RegisterAPI((*SessionManager).SetUserOption, apikeys.SetUserOption)
 	servermodule.RegisterAPI((*SessionManager).RemoveClient, apikeys.RemoveClient)
 	servermodule.RegisterAPI((*SessionManager).SendMessages, apikeys.SendMessages)
 
@@ -125,55 +124,6 @@ func (s *SessionManager) BroadcastMessage(msg interface{}) {
 	}
 }
 
-func (s *SessionManager) SetUserOption(client *Client, userState *mumbleproto.UserState) {
-
-	//actor는 메시지를 보낸 클라이언트
-	actor, ok := s.clientList[client.Session()]
-	if !ok {
-		panic("Client not found in server's client map.")
-		return
-	}
-
-	//target이 없으면 actor가 target
-	target := actor
-	if userState.Session != nil {
-		target, ok = s.clientList[*userState.Session]
-		if !ok {
-			fmt.Println("Invalid session in UserState message")
-			return
-		}
-	}
-
-	userState.Session = proto.Uint32(target.Session())
-	userState.Actor = proto.Uint32(actor.Session())
-
-	newUserState := &mumbleproto.UserState{
-		Deaf:     proto.Bool(false),
-		SelfDeaf: proto.Bool(false),
-		Name:     userState.Name,
-	}
-	if userState.Mute != nil {
-		if actor.Session() != target.Session() {
-			//can't change other users mute state
-			//permission denied
-			actor.sendPermissionDenied(mumbleproto.PermissionDenied_Permission)
-		} else {
-			// 변경
-			newUserState.Mute = userState.Mute
-		}
-	} else {
-		if actor.Session() != target.Session() {
-			if actor.mute == false {
-
-			}
-		}
-	}
-
-	if userState.ChannelId != nil {
-		servermodule.AsyncCall(apikeys.BroadcastChannel, *userState.ChannelId, newUserState)
-	}
-}
-
 func (s *SessionManager) SendMessages(sessions []uint32, msg interface{}) {
 	for _, session := range sessions {
 		fmt.Println(session)
@@ -236,9 +186,9 @@ func (s *SessionManager) handleAuthenticate(msg *Message) error {
 	}
 
 	/// send channel state
-	servermodule.AsyncCall(apikeys.SendChannelList, client)
+	servermodule.Call(apikeys.SendChannelList, client)
 	// enter the root channel as default channel
-	servermodule.AsyncCall(apikeys.EnterChannel, ROOT_CHANNEL, client)
+	servermodule.Call(apikeys.EnterChannel, ROOT_CHANNEL, client)
 
 	sync := &mumbleproto.ServerSync{
 		Session:      proto.Uint32(uint32(client.session)),

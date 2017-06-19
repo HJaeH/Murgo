@@ -4,8 +4,11 @@ import (
 	"fmt"
 
 	"murgo/pkg/mumbleproto"
+	"murgo/server/util/log"
 
 	"reflect"
+
+	"time"
 
 	"github.com/golang/protobuf/proto"
 )
@@ -75,8 +78,10 @@ func (c *Channel) SendUserListInChannel(client *Client) {
 }
 
 func (c *Channel) BroadCastChannel(msg interface{}) {
+	time.Sleep(100 * time.Millisecond)
 	for _, client := range c.clients {
-		client.sendMessageWithInterval(msg)
+		//client.sendMessageWithInterval(msg)
+		client.sendMessage(msg)
 	}
 }
 func (c *Channel) BroadCastChannelWithoutMe(me *Client, msg interface{}) {
@@ -84,7 +89,9 @@ func (c *Channel) BroadCastChannelWithoutMe(me *Client, msg interface{}) {
 		if reflect.DeepEqual(me, eachClient) {
 			continue
 		}
-		eachClient.sendMessageWithInterval(msg)
+		if err := eachClient.sendMessage(msg); err != nil {
+			log.ErrorP(msg)
+		}
 	}
 }
 

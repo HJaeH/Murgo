@@ -11,7 +11,6 @@ const (
 	//101 ~
 	HandleIncomingClient = ModSession + iota + 1
 	BroadcastMessage
-	SetUserOption
 	RemoveClient
 	SendMessages
 )

@@ -10,15 +10,11 @@ import (
 	"murgo/pkg/servermodule"
 	"murgo/server/util/apikeys"
 	"murgo/server/util/log"
-
-	"reflect"
 )
 
 const ROOT_CHANNEL uint32 = 0
 
 type ChannelManager struct {
-
-	//todo add numChannel and keep channel ids
 	channelList   map[uint32]*Channel
 	nextChannelID uint32
 	rootChannel   *Channel
@@ -80,10 +76,7 @@ func (c *ChannelManager) BroadCastChannel(channelId uint32, msg interface{}) {
 	if err != nil {
 		fmt.Println(err)
 	}
-	for _, client := range channel.clients {
-		//todo : send msg 1
-		client.sendMessageWithInterval(msg)
-	}
+	channel.BroadCastChannel(msg)
 }
 
 func (c *ChannelManager) BroadCastChannelWithoutMe(channelId uint32, me *Client, msg interface{}) {
@@ -91,16 +84,7 @@ func (c *ChannelManager) BroadCastChannelWithoutMe(channelId uint32, me *Client,
 	if err != nil {
 		fmt.Println(err)
 	}
-	for _, eachClient := range channel.clients {
-		if reflect.DeepEqual(me, eachClient) {
-			continue
-		}
-		//todo send message1
-		err = eachClient.sendMessageWithInterval(msg)
-		if err != nil {
-			fmt.Println(err)
-		}
-	}
+	channel.BroadCastChannelWithoutMe(me, msg)
 }
 
 func (c *ChannelManager) channel(channelId uint32) (*Channel, error) {
@@ -118,16 +102,8 @@ func (c *ChannelManager) SendChannelList(client *Client) {
 }
 
 func (c *ChannelManager) EnterChannel(channelId uint32, client *Client) {
-	newChannel, err := c.channel(channelId)
-	//fmt.Println(client.UserName, " will enter ", newChannel.Name)
-	if err != nil {
-		panic("Channel Id doesn't exist")
-	}
+	newChannel, _ := c.channel(channelId)
 	oldChannel := client.Channel
-
-	if oldChannel == newChannel {
-		return
-	}
 
 	if oldChannel != nil {
 		oldChannel.removeClient(client)
@@ -142,29 +118,22 @@ func (c *ChannelManager) EnterChannel(channelId uint32, client *Client) {
 	userState := client.toUserState()
 
 	if oldChannel != nil && oldChannel.Id != ROOT_CHANNEL {
-		//이전에 있던 채널에 떠난 유저의 userstate message 전송
-		c.BroadCastChannelWithoutMe(oldChannel.Id, client, userState)
-		//c.BroadCastChannel(oldChannel.Id, userState)
+		//이전에 있던 채널에 알림
+		c.BroadCastChannel(oldChannel.Id, userState)
 	}
 
 	//새 채널에 알림
 	if newChannel.Id != ROOT_CHANNEL {
 		//새 채널입장을 채널 유저들에게 알림
-
 		c.BroadCastChannel(newChannel.Id, userState)
-		//c.broadCastChannelWithoutMe(newChannel.Id, userState, client)
 		//채널에 있는 유저들을 입장하는 유저에게 알림
 		newChannel.SendUserListInChannel(client)
 	} else {
-		//send message1 따로 분리
-		client.sendMessageWithInterval(userState)
+		//client.sendMessageWithInterval(userState)
+		client.sendMessage(userState)
 	}
 
-	if err != nil {
-
-		fmt.Println("error sending message")
-	}
-
+	c.printChannels()
 }
 
 func (c *ChannelManager) removeChannel(tempChannel interface{}) {
@@ -214,7 +183,7 @@ func (c *ChannelManager) checkChannelNameDuplication(channelName string) bool {
 func (c *ChannelManager) printChannels() {
 	fmt.Println("channel list : ")
 	for _, channel := range c.channelList {
-		fmt.Print(channel.Name, ", ")
+		fmt.Print(channel.Name, ", ", channel.clients)
 	}
 	fmt.Println()
 }
