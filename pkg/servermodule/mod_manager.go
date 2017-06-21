@@ -9,6 +9,7 @@ import (
 
 type ModManagerCallback interface {
 	Init()
+	Terminate() error
 }
 type modManager struct {
 	isRunning bool
@@ -16,6 +17,7 @@ type modManager struct {
 
 	asyncCallChan chan *AsyncCallMessage
 	callChan      chan *CallMessage
+	ModManagerCallback
 }
 
 func (m *modManager) init() {
@@ -150,4 +152,9 @@ func Start(modManagerInterface ModManagerCallback) {
 	go modManager.run()
 	//app's Init callback
 	modManagerInterface.Init()
+}
+
+//todo stop all routines
+func Terminate() error {
+	return nil
 }

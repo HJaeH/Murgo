@@ -8,7 +8,6 @@ import (
 
 const (
 	_none = iota
-	_panic
 	_error
 )
 
@@ -26,6 +25,7 @@ func ErrorP(reason interface{}, val ...interface{}) {
 	err := errorToString(_none, reason, val)
 	fmt.Println(err)
 }
+
 func errorToString(isPanic uint, reason interface{}, val ...interface{}) string {
 	var buffer bytes.Buffer
 	switch isPanic {

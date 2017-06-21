@@ -43,7 +43,7 @@ func (c *Channel) IsEmpty() bool {
 	return (len(c.clients) == 0)
 }
 
-func (c *Channel) removeClient(client *Client) {
+func (c *Channel) leave(client *Client) {
 	delete(c.clients, client.Session())
 	client.Channel = nil
 }
@@ -78,15 +78,17 @@ func (c *Channel) SendUserListInChannel(client *Client) {
 }
 
 func (c *Channel) BroadCastChannel(msg interface{}) {
+	//todo : 브로드캐스팅 시 지연 없으면 문제 발생. 이유 파악중
 	time.Sleep(100 * time.Millisecond)
 	for _, client := range c.clients {
-		//client.sendMessageWithInterval(msg)
 		client.sendMessage(msg)
 	}
 }
-func (c *Channel) BroadCastChannelWithoutMe(me *Client, msg interface{}) {
+
+//todo : except for 로 일반화
+func (c *Channel) BroadCastChannelWithoutMe(msg interface{}, withoutMe *Client /*, exceptFor ...*Client*/) {
 	for _, eachClient := range c.clients {
-		if reflect.DeepEqual(me, eachClient) {
+		if reflect.DeepEqual(withoutMe, eachClient) {
 			continue
 		}
 		if err := eachClient.sendMessage(msg); err != nil {

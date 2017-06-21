@@ -40,7 +40,7 @@ func (s *SessionManager) RemoveClient(client *Client) {
 	//delete from channel
 	channel := client.Channel
 	if channel != nil {
-		channel.removeClient(client)
+		channel.leave(client)
 	}
 	s.sessionPool.Reclaim(client.Session())
 }
@@ -67,7 +67,7 @@ func (s *SessionManager) HandleIncomingClient(conn net.Conn) {
 	version := &mumbleproto.Version{
 		Version:     proto.Uint32(0x10205),
 		Release:     proto.String(config.AppName),
-		CryptoModes: config.SupportedModes(),
+		CryptoModes: SupportedModes(),
 	}
 	err := client.sendMessage(version)
 	if err != nil {

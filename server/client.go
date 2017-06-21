@@ -8,7 +8,6 @@ import (
 	"io"
 	"net"
 
-	"murgo/config"
 	"murgo/pkg/mumbleproto"
 	"murgo/server/util/apikeys"
 
@@ -20,60 +19,47 @@ import (
 )
 
 type Client struct {
-	Channel *Channel
-	conn    *net.Conn
-	session uint32
-
+	session  uint32
 	UserName string
-	userId   uint32
-	reader   *bufio.Reader
+	Channel  *Channel
 
-	tcpaddr  *net.TCPAddr
-	certHash string
-
-	bandWidth *BandWidth
-	//user's setting
-	selfDeaf bool
-	selfMute bool
-	mute     bool
-	deaf     bool
-
-	tcpPingAvg float32
-	tcpPingVar float32
-	tcpPackets uint32
-	opus       bool
-	suppress   bool
-
-	//client auth infomations
-	codecs []int32
-	tokens []string
-
-	//crypt state
-	crypt *config.CryptState
-
-	//client connection state
-	state        int
-	disconnected bool
-
-	//version
-	version uint32
-
+	selfDeaf           bool
+	selfMute           bool
+	mute               bool
+	deaf               bool
 	prioritySpeaker    bool
 	channelOwner       bool
 	existUsableMic     bool
 	existUsableSpeaker bool
+
+	tcpPingAvg       float32
+	tcpPingVar       float32
+	tcpPackets       uint32
+	opus             bool
+	suppress         bool
+	onlinesecs       uint32
+	bandwidth        uint32
+	bandwidthRecord  *Bandwidth
+	bandwidthRecord2 *Bandwidth
+	idelsecs         uint32
+
+	conn         *net.Conn
+	reader       *bufio.Reader
+	crypt        *CryptState
+	codecs       []int32
+	tokens       []string
+	disconnected bool
+	version      uint32
 }
 
-// called at session manager
-//func NewTlsClient(conn *net.Conn, session uint32, supervisor *MurgoSupervisor) (*TlsClient){
 func newClient(conn *net.Conn, session uint32) *Client {
-	//create new object
 	client := new(Client)
-	client.crypt = new(config.CryptState)
-	client.userId = session
+	client.crypt = new(CryptState)
+	client.session = session
 
-	//tlsClient.MurgoSupervisor = supervisor
-	client.bandWidth = NewBandWidth()
+	client.bandwidthRecord = newBandwidth()
+	client.bandwidthRecord2 = newBandwidth()
+
 	client.conn = conn
 	client.session = session
 	client.reader = bufio.NewReader(*client.conn)
@@ -165,6 +151,7 @@ func (c *Client) Disconnect() {
 		c.disconnected = true
 		(*c.conn).Close()
 		servermodule.AsyncCall(apikeys.RemoveClient, c)
+		fmt.Println("clinet left")
 	}
 }
 
@@ -173,7 +160,7 @@ func (c *Client) toUserState() *mumbleproto.UserState {
 	userStateMsg := &mumbleproto.UserState{
 		Session:   proto.Uint32(c.session),
 		Name:      proto.String(c.UserName),
-		UserId:    proto.Uint32(uint32(c.userId)),
+		UserId:    proto.Uint32(uint32(c.session)),
 		ChannelId: proto.Uint32(c.Channel.Id),
 		Mute:      proto.Bool(c.mute),
 		Deaf:      proto.Bool(c.deaf),
@@ -182,6 +169,19 @@ func (c *Client) toUserState() *mumbleproto.UserState {
 		SelfMute:  proto.Bool(c.selfMute),
 	}
 	return userStateMsg
+}
+
+func (c *Client) toUserStats() *mumbleproto.UserStats {
+	msg := &mumbleproto.UserStats{
+		TcpPackets: proto.Uint32(c.tcpPackets),
+		TcpPingAvg: proto.Float32(c.tcpPingAvg),
+		TcpPingVar: proto.Float32(c.tcpPingVar),
+		Bandwidth:  proto.Uint32(c.bandwidth),
+		Opus:       proto.Bool(c.opus),
+		Onlinesecs: proto.Uint32(c.getOnlinesecs()),
+		Idlesecs:   proto.Uint32(c.getIdlesecs()),
+	}
+	return msg
 }
 
 func (c *Client) Session() uint32 {
@@ -193,12 +193,10 @@ func (c *Client) reject(rejectType mumbleproto.Reject_RejectType, reason string)
 	if len(reason) > 0 {
 		reasonString = proto.String(reason)
 	}
-
 	c.sendMessage(&mumbleproto.Reject{
 		Type:   rejectType.Enum(),
 		Reason: reasonString,
 	})
-
 	c.Disconnect()
 }
 
@@ -209,4 +207,46 @@ func (c *Client) sendPermissionDenied(denyType mumbleproto.PermissionDenied_Deny
 	}
 	fmt.Println("Permission denied", permissionDeniedMsg)
 	return c.sendMessage(permissionDeniedMsg)
+}
+
+func (c *Client) setPing(pingMsg *mumbleproto.Ping) {
+	c.tcpPackets = pingMsg.GetTcpPackets()
+	c.tcpPingAvg = pingMsg.GetTcpPingAvg()
+	c.tcpPingVar = pingMsg.GetTcpPingVar()
+}
+
+func (c *Client) getIdlesecs() uint32 {
+	return uint32((nowMicrosec() - c.bandwidthRecord.idleTimer) / 1000000)
+}
+
+func (c *Client) getOnlinesecs() uint32 {
+	return uint32((nowMicrosec() - c.bandwidthRecord.onlineTimer) / 1000000)
+}
+
+func (c *Client) resetIdle() {
+	c.bandwidthRecord.idleTimer = nowMicrosec()
+}
+
+func (c *Client) addFrame(packetSize uint32) error {
+	now := nowMicrosec()
+	elapsed := uint64(now-c.bandwidthRecord.bandwidthTimer) / 1000000.0 // sec
+	if elapsed == 0 {
+		return nil
+	}
+
+	calcBandwidth(c.bandwidthRecord, packetSize)
+	c.bandwidth = c.bandwidthRecord.bandwidth
+
+	if c.bandwidthRecord.frameNo == HalfFrameSlots {
+		c.bandwidthRecord2.reset()
+	}
+	if c.bandwidthRecord.frameNo >= HalfFrameSlots {
+		calcBandwidth(c.bandwidthRecord2, packetSize)
+	}
+	if c.bandwidthRecord.frameNo == MaxFrameSlots {
+		c.bandwidthRecord.copyFrom(c.bandwidthRecord2)
+		c.bandwidthRecord2.reset()
+	}
+
+	return nil
 }

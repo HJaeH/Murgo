@@ -23,6 +23,7 @@ func (s *Server) Accept() {
 	conn, err := s.ln.Accept()
 	if err != nil {
 		fmt.Println(" Accepting a conneciton failed handling a client")
+		return
 	}
 	servermodule.AsyncCall(apikeys.HandleIncomingClient, conn)
 	servermodule.AsyncCall(apikeys.Accept)
@@ -50,17 +51,15 @@ func (s *Server) Init() {
 
 func (s *Server) terminate() {
 	s.ln.Close()
-
 }
 
 func (s *Server) Receive(client *Client) {
-
 	for {
-
 		msg, err := client.readProtoMessage()
 		if err != nil {
 			if err != nil {
 				if err == io.EOF {
+					//log.Panic("Client left")
 					client.Disconnect()
 				} else {
 					//client disconnected
@@ -71,39 +70,30 @@ func (s *Server) Receive(client *Client) {
 			}
 		}
 		if msg.kind == mumbleproto.MessageUDPTunnel {
-
 			//Do not send voice data to clients in root channel
-			//VoicelibTester client also check this, just to be sure.
-
 			if client.Channel.Id == ROOT_CHANNEL {
 				continue
 			} else {
-				//fmt.Print(".")
 				buf := msg.buf
 				if len(buf) == 0 {
 					return
 				}
-
 				kind := (msg.buf[0] >> 5) & 0x07
 				switch kind {
-
 				case mumbleproto.UDPMessageVoiceOpus:
+					client.addFrame(uint32(len(msg.buf)))
 					outbuf := make([]byte, 1024)
-
 					incoming := packetdata.New(buf[1 : 1+(len(buf)-1)])
 					outgoing := packetdata.New(outbuf[1 : 1+(len(outbuf)-1)])
 					_ = incoming.GetUint32()
-
 					size := int(incoming.GetUint16())
 					incoming.Skip(size & 0x1fff)
 					outgoing.PutUint32(client.Session())
 					outgoing.PutBytes(buf[1 : 1+(len(buf)-1)])
-					outbuf[0] = buf[0] & 0xe0 // strip target`
+					outbuf[0] = buf[0] & 0xe0
 					buf := outbuf[0 : 1+outgoing.Size()]
-
-					go client.Channel.BroadCastChannelWithoutMe(client, buf)
+					go client.Channel.BroadCastChannelWithoutMe(buf, client)
 				}
-
 			}
 		} else {
 			servermodule.AsyncCall(apikeys.HandleMessage, msg)

@@ -84,7 +84,7 @@ func (c *ChannelManager) BroadCastChannelWithoutMe(channelId uint32, me *Client,
 	if err != nil {
 		fmt.Println(err)
 	}
-	channel.BroadCastChannelWithoutMe(me, msg)
+	channel.BroadCastChannelWithoutMe(msg, me)
 }
 
 func (c *ChannelManager) channel(channelId uint32) (*Channel, error) {
@@ -101,12 +101,51 @@ func (c *ChannelManager) SendChannelList(client *Client) {
 	}
 }
 
+// on refactoring
+/*
+func (c *ChannelManager) EnterChannel(channelId uint32, client *Client) error {
+	newChannel, err := c.channel(channelId)
+	if err != nil {
+		return log.Error("Try to enter not existing channel ", channelId, "by", client.UserName)
+	}
+	oldChannel := client.Channel
+	client.Channel = newChannel
+	newChannel.addClient(client)
+	userState := client.toUserState()
+
+	if oldChannel != nil {
+		// leave old channel
+		oldChannel.leave(client)
+		//remove the channel if it's empty
+		if oldChannel.IsEmpty() && oldChannel.Id != ROOT_CHANNEL {
+			c.removeChannel(oldChannel)
+			oldChannel = nil
+		}
+		//이전에 있던 채널에 알림
+		if oldChannel.Id != ROOT_CHANNEL {
+			c.BroadCastChannel(oldChannel.Id, userState)
+		}
+	}
+
+	//새 채널에 알림
+	if newChannel.Id != ROOT_CHANNEL {
+		//새 채널입장을 채널 유저들에게 알림
+		c.BroadCastChannel(newChannel.Id, userState)
+		//채널에 있는 유저들을 입장하는 유저에게 알림
+		newChannel.SendUserListInChannel(client)
+	} else {
+		client.sendMessage(userState)
+	}
+
+	return nil
+}*/
+
 func (c *ChannelManager) EnterChannel(channelId uint32, client *Client) {
 	newChannel, _ := c.channel(channelId)
 	oldChannel := client.Channel
 
 	if oldChannel != nil {
-		oldChannel.removeClient(client)
+		oldChannel.leave(client)
 		if oldChannel.IsEmpty() {
 			c.removeChannel(oldChannel)
 			oldChannel = nil
@@ -133,7 +172,6 @@ func (c *ChannelManager) EnterChannel(channelId uint32, client *Client) {
 		client.sendMessage(userState)
 	}
 
-	c.printChannels()
 }
 
 func (c *ChannelManager) removeChannel(tempChannel interface{}) {

@@ -13,8 +13,7 @@ func Start() {
 	servermodule.Start(new(ModManager)) // root supervisor
 }
 func Terminate() error {
-
-	return nil
+	return servermodule.Terminate()
 }
 
 //callback
@@ -25,10 +24,9 @@ func (m *ModManager) Init() {
 	servermodule.AddModule(m, new(ChannelManager), 1)
 	servermodule.AddModule(m, new(Server), 100)
 	servermodule.AddModule(m, new(MessageHandler), 5)
-	fmt.Println(config.AppName, "is running now")
+	fmt.Println(config.AppName, "is now running")
 }
 
 func (m *ModManager) Terminate() error {
-
 	return nil
 }
