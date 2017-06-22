@@ -44,8 +44,13 @@ func (c *Channel) IsEmpty() bool {
 }
 
 func (c *Channel) leave(client *Client) {
+	userstate := client.toUserState()
 	delete(c.clients, client.Session())
 	client.Channel = nil
+	if c != nil && c.Id != ROOT_CHANNEL {
+		c.BroadCastChannel(userstate)
+	}
+
 }
 func (c *Channel) addClient(client *Client) {
 	c.clients[client.Session()] = client
@@ -63,7 +68,7 @@ func (c *Channel) toChannelState() *mumbleproto.ChannelState {
 	return channelStateMsg
 }
 
-func (c *Channel) SendUserListInChannel(client *Client) {
+func (c *Channel) SendUserListInChannel(client *Client) error {
 	fmt.Println(c.Name)
 	for _, eachUser := range c.clients {
 		fmt.Print(eachUser.UserName)
@@ -72,20 +77,22 @@ func (c *Channel) SendUserListInChannel(client *Client) {
 		}
 		err := client.sendMessage(eachUser.toUserState())
 		if err != nil {
-			panic(" Error sending channel User list")
+
+			client.Disconnect()
+			return log.Error("Error sending channel User list")
 		}
 	}
+	return nil
 }
 
 func (c *Channel) BroadCastChannel(msg interface{}) {
-	//todo : 브로드캐스팅 시 지연 없으면 문제 발생. 이유 파악중
+	//todo : 브로드캐스팅 시 지연 없으면 문제 발생.
 	time.Sleep(100 * time.Millisecond)
 	for _, client := range c.clients {
 		client.sendMessage(msg)
 	}
 }
 
-//todo : except for 로 일반화
 func (c *Channel) BroadCastChannelWithoutMe(msg interface{}, withoutMe *Client /*, exceptFor ...*Client*/) {
 	for _, eachClient := range c.clients {
 		if reflect.DeepEqual(withoutMe, eachClient) {

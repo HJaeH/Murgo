@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"murgo/pkg/mumbleproto"
 	"murgo/pkg/servermodule"
-	"murgo/server/util/apikeys"
 	"murgo/server/util/log"
 
 	"murgo/config"
+
+	"murgo/server/util/event"
 
 	"github.com/golang/protobuf/proto"
 )
@@ -31,13 +32,10 @@ func (messageHandler *MessageHandler) HandleMessage(msg *Message) {
 		messageHandler.handleUserStatsMessage(msg)
 
 	case mumbleproto.MessageChannelState:
-		//msg.client.resetIdle()
 		messageHandler.handleChannelStateMessage(msg)
 	case mumbleproto.MessageUserState:
-		//msg.client.resetIdle()
 		messageHandler.handleUserStateMessage(msg)
 	case mumbleproto.MessageTextMessage:
-		//msg.client.resetIdle()
 		messageHandler.handleTextMessage(msg)
 	default:
 		err = log.Error("Uncategorized msg type", msg.kind)
@@ -68,7 +66,6 @@ func (m *MessageHandler) handleUserStateMessage(msg *Message) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(userState)
 
 	actor := msg.client
 	targetSession := userState.GetSession()
@@ -82,12 +79,12 @@ func (m *MessageHandler) handleUserStateMessage(msg *Message) error {
 		}
 		return nil
 	}
-	// case A. send message to itself 자기자신에게 보내는 경우 - 채널 이동, 상태변경
+	// case A. 자기자신에게 보내는 경우 - 채널 이동, 상태변경
 	if actor.Session() == targetSession {
 		target := actor
 		//case A1. enter channel
 		if userState.ChannelId != nil {
-			servermodule.Call(apikeys.EnterChannel, *userState.ChannelId, actor)
+			servermodule.Call(event.EnterChannel, *userState.ChannelId, actor)
 			return nil
 		}
 		//case A2. update my userState in root channel
@@ -107,9 +104,9 @@ func (m *MessageHandler) handleUserStateMessage(msg *Message) error {
 			}
 			return nil
 		}
-		//case A3. update my userState in normal channel
+		//case A3. change my speak ablility
 		if userState.Mute != nil {
-			//self mute와 별개로 channel에는 정해진 수의 발언권을 가진 유저들이 있다
+			//self mute와 별개로 channel에는 정해진 수(12)의 발언권을 가진 유저들이 있다
 			if userState.GetMute() == false {
 				if !actor.existUsableMic ||
 					!actor.existUsableSpeaker {
@@ -124,17 +121,18 @@ func (m *MessageHandler) handleUserStateMessage(msg *Message) error {
 					}
 					return nil
 				}
-				actor.mute = false
-				servermodule.AsyncCall(apikeys.BroadcastChannel, actor.Channel.Id, userState)
+				target.mute = false
+
+				servermodule.AsyncCall(event.BroadcastChannel, actor.Channel.Id, userState)
 			} else { // resign the right to speak by itself
-				target.mute = true
-				servermodule.AsyncCall(apikeys.BroadcastChannel, actor.Channel.Id, userState)
+				actor.mute = true
+				servermodule.AsyncCall(event.BroadcastChannel, actor.Channel.Id, userState)
 
 			}
 			return nil
 		}
 
-		//case A4.change userState by itself.
+		//case A4.change userState itself.
 		changed := false
 		if userState.ExistUsableMic != nil {
 			target.existUsableMic = userState.GetExistUsableMic()
@@ -153,7 +151,7 @@ func (m *MessageHandler) handleUserStateMessage(msg *Message) error {
 			changed = true
 		}
 		if changed {
-			servermodule.AsyncCall(apikeys.BroadcastChannel, actor.Channel.Id, userState)
+			servermodule.AsyncCall(event.BroadcastChannel, target.Channel.Id, userState)
 		} else {
 			if err := target.sendPermissionDenied(mumbleproto.PermissionDenied_Permission); err != nil {
 				return err
@@ -161,47 +159,13 @@ func (m *MessageHandler) handleUserStateMessage(msg *Message) error {
 		}
 
 	} else { //case B. send userState to other person (target) -
-		/*if userState.GetMute() == true {
-			if err := target.sendPermissionDenied(mumbleproto.PermissionDenied_Permission); err != nil {
-				return err
-			}
-		}
-
-		// give actors right to talk to target
-		if userState.GetMute() == false {
-			//only when actor has the right
-			if target.user.existUsableMic &&
-				target.user.existUsableSpeaker &&
-				actor.user.mute == false {
-				actor.user.mute = true
-				newUserState := &mumble.UserState{
-					Session: proto.Uint32(actor.sessionID),
-					Actor:   proto.Uint32(actor.sessionID),
-					Mute:    proto.Bool(true),
-				}
-				if err := o.server.channelManager.BroadcastToChannel(actor.channel, newUserState, nil); err != nil {
-					log.Error(err)
-					return
-				}
-				// give it to target
-				target.user.mute = true
-				newUserState.Session = proto.Uint32(target.sessionID)
-				newUserState.Actor = proto.Uint32(target.sessionID)
-				newUserState.Mute = proto.Bool(false)
-				if err := o.server.channelManager.BroadcastToChannel(target.channel, newUserState, nil); err != nil {
-					log.Error(err)
-					return
-				}
-			}
-			return
-		}*/
+		servermodule.Call(event.GiveSpeakAbility, userState)
 	}
 
 	return nil
 
 }
 
-//구현된 핸들링 함수
 func (m *MessageHandler) handleChannelStateMessage(tempMsg interface{}) {
 	msg := tempMsg.(*Message)
 	channelStateMsg := &mumbleproto.ChannelState{}
@@ -211,7 +175,7 @@ func (m *MessageHandler) handleChannelStateMessage(tempMsg interface{}) {
 		return
 	}
 	if channelStateMsg.ChannelId == nil && channelStateMsg.Name != nil && *channelStateMsg.Temporary == true && *channelStateMsg.Parent == 0 && *channelStateMsg.Position == 0 {
-		servermodule.Call(apikeys.AddChannel, *channelStateMsg.Name, msg.client)
+		servermodule.Call(event.AddChannel, *channelStateMsg.Name, msg.client)
 	}
 }
 func (m *MessageHandler) handleUserStatsMessage(msg *Message) {
@@ -225,16 +189,15 @@ func (m *MessageHandler) handleUserStatsMessage(msg *Message) {
 	client.sendMessage(msg.client.toUserStats())
 }
 
-func (m *MessageHandler) handleTextMessage(msg *Message) {
+func (m *MessageHandler) handleTextMessage(msg *Message) error {
 	client := msg.client
 	textMsg := &mumbleproto.TextMessage{}
 	err := proto.Unmarshal(msg.buf, textMsg)
 	if err != nil {
-		panic(err)
-		return
+		return err
 	}
 	if len(*textMsg.Message) == 0 {
-		return
+		return err
 	}
 	newMsg := &mumbleproto.TextMessage{
 		Actor:   proto.Uint32(client.Session()),
@@ -242,14 +205,16 @@ func (m *MessageHandler) handleTextMessage(msg *Message) {
 	}
 	// send text message to channels
 	for _, eachChannelId := range textMsg.ChannelId {
-		servermodule.AsyncCall(apikeys.BroadCastChannelWithoutMe, eachChannelId, client, newMsg)
+		servermodule.AsyncCall(event.BroadCastChannelWithoutMe, eachChannelId, client, newMsg)
 	}
 
 	// send text message to users
-	servermodule.AsyncCall(apikeys.SendMessages, textMsg.Session, newMsg)
+	servermodule.AsyncCall(event.SendMultipleMessages, textMsg.Session, newMsg)
+
+	return nil
 }
 
 func (m *MessageHandler) Init() {
-	servermodule.RegisterAPI((*MessageHandler).HandleMessage, apikeys.HandleMessage)
+	servermodule.RegisterAPI((*MessageHandler).HandleMessage, event.HandleMessage)
 
 }

@@ -64,8 +64,8 @@ func AddModule(smod ModManagerCallback, mod ModCallback, semaphore int) {
 	smid := getMid(smod)
 
 	//set supervisor of new module
-	if sup, ok := router.modManager[smid]; ok {
-		router.modManager[mid] = sup
+	if sup, ok := dispatcher.modManager[smid]; ok {
+		dispatcher.modManager[mid] = sup
 		gen := newModule(smod, mod, semaphore)
 		sup.addChild(mid, gen)
 	} else {
@@ -98,13 +98,13 @@ func RegisterAPI(rawAPI interface{}, apiKey int) {
 
 func register(modName string, apiName string, apiKey int) {
 
-	sup, _ := router.modManager[modName]
+	sup, _ := dispatcher.modManager[modName]
 	mod := sup.child(modName)
 	apiVal := mod.val.MethodByName(apiName)
 	newAPI := newAPI(mod, apiVal, apiKey)
 
 	mod.apis[apiKey] = newAPI
-	router.apiMap[apiKey] = newAPI
+	dispatcher.apiMap[apiKey] = newAPI
 }
 
 func getMid(mod interface{}) string {
@@ -115,7 +115,7 @@ func (g *Module) init(modManager ModManagerCallback, mod ModCallback, semaphore 
 	mid := getMid(mod)
 	mmid := getMid(modManager)
 
-	parent := router.modManager[mmid]
+	parent := dispatcher.modManager[mmid]
 	g.wg = new(sync.WaitGroup)
 	//g.sync = make(chan bool, routeBufferPerModule)
 	g.buf = make(chan bool, defaultBuf)

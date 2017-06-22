@@ -6,14 +6,18 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"log"
 	"net"
 
 	"murgo/pkg/mumbleproto"
-	"murgo/server/util/apikeys"
 
 	"murgo/pkg/servermodule"
 
 	"fmt"
+
+	"murgo/server/util/event"
+
+	"murgo/server/util/crypt"
 
 	"github.com/golang/protobuf/proto"
 )
@@ -45,16 +49,18 @@ type Client struct {
 
 	conn         *net.Conn
 	reader       *bufio.Reader
-	crypt        *CryptState
+	crypt        *crypt.CryptState
 	codecs       []int32
 	tokens       []string
 	disconnected bool
 	version      uint32
+
+	*log.Logger
 }
 
 func newClient(conn *net.Conn, session uint32) *Client {
 	client := new(Client)
-	client.crypt = new(CryptState)
+	client.crypt = new(crypt.CryptState)
 	client.session = session
 
 	client.bandwidthRecord = newBandwidth()
@@ -143,6 +149,7 @@ func (c *Client) readProtoMessage() (msg *Message, err error) {
 		kind:   kind,
 		client: c,
 	}
+
 	return msg, err
 }
 
@@ -150,7 +157,7 @@ func (c *Client) Disconnect() {
 	if !c.disconnected {
 		c.disconnected = true
 		(*c.conn).Close()
-		servermodule.AsyncCall(apikeys.RemoveClient, c)
+		servermodule.AsyncCall(event.RemoveClient, c)
 		fmt.Println("clinet left")
 	}
 }
@@ -158,15 +165,17 @@ func (c *Client) Disconnect() {
 func (c *Client) toUserState() *mumbleproto.UserState {
 
 	userStateMsg := &mumbleproto.UserState{
-		Session:   proto.Uint32(c.session),
-		Name:      proto.String(c.UserName),
-		UserId:    proto.Uint32(uint32(c.session)),
-		ChannelId: proto.Uint32(c.Channel.Id),
-		Mute:      proto.Bool(c.mute),
-		Deaf:      proto.Bool(c.deaf),
-		Suppress:  proto.Bool(c.suppress),
-		SelfDeaf:  proto.Bool(c.selfDeaf),
-		SelfMute:  proto.Bool(c.selfMute),
+		Session:            proto.Uint32(c.session),
+		Name:               proto.String(c.UserName),
+		UserId:             proto.Uint32(uint32(c.session)),
+		ChannelId:          proto.Uint32(c.Channel.Id),
+		Mute:               proto.Bool(c.mute),
+		Deaf:               proto.Bool(c.deaf),
+		Suppress:           proto.Bool(c.suppress),
+		SelfDeaf:           proto.Bool(c.selfDeaf),
+		SelfMute:           proto.Bool(c.selfMute),
+		ExistUsableMic:     proto.Bool(c.existUsableMic),
+		ExistUsableSpeaker: proto.Bool(c.existUsableSpeaker),
 	}
 	return userStateMsg
 }
@@ -249,4 +258,9 @@ func (c *Client) addFrame(packetSize uint32) error {
 	}
 
 	return nil
+}
+
+func (client *Client) Panicf(format string, v ...interface{}) {
+	client.Printf(format, v...)
+	client.Disconnect()
 }

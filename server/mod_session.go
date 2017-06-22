@@ -7,12 +7,15 @@ import (
 	"murgo/pkg/mumbleproto"
 	"murgo/pkg/servermodule"
 	"murgo/pkg/sessionpool"
-	"murgo/server/util/apikeys"
 	"murgo/server/util/log"
 
 	"net"
 
 	"io"
+
+	"murgo/server/util/event"
+
+	"murgo/server/util/crypt"
 
 	"github.com/golang/protobuf/proto"
 	"mumble.info/grumble/pkg/acl"
@@ -26,10 +29,10 @@ type SessionManager struct {
 func (s *SessionManager) getClientList() map[uint32]*Client {
 	return s.clientList
 }
-func (s *SessionManager) getClient(session uint32) *Client {
+func (s *SessionManager) client(session uint32) *Client {
 	client, ok := s.clientList[session]
 	if ok != true {
-		panic("invalid session")
+		log.ErrorP("invalid session")
 	}
 	return client
 }
@@ -41,16 +44,22 @@ func (s *SessionManager) RemoveClient(client *Client) {
 	channel := client.Channel
 	if channel != nil {
 		channel.leave(client)
+		if channel.IsEmpty() {
+			servermodule.Call(event.RemoveChannel, channel)
+		}
+
 	}
+
 	s.sessionPool.Reclaim(client.Session())
 }
 
 //Callbacks
 func (s *SessionManager) Init() {
-	servermodule.RegisterAPI((*SessionManager).HandleIncomingClient, apikeys.HandleIncomingClient)
-	servermodule.RegisterAPI((*SessionManager).BroadcastMessage, apikeys.BroadcastMessage)
-	servermodule.RegisterAPI((*SessionManager).RemoveClient, apikeys.RemoveClient)
-	servermodule.RegisterAPI((*SessionManager).SendMessages, apikeys.SendMessages)
+	servermodule.RegisterAPI((*SessionManager).HandleIncomingClient, event.HandleIncomingClient)
+	servermodule.RegisterAPI((*SessionManager).BroadcastMessage, event.BroadcastMessage)
+	servermodule.RegisterAPI((*SessionManager).RemoveClient, event.RemoveClient)
+	servermodule.RegisterAPI((*SessionManager).SendMultipleMessage, event.SendMultipleMessages)
+	servermodule.RegisterAPI((*SessionManager).GiveSpeakAbility, event.GiveSpeakAbility)
 
 	s.sessionPool = sessionpool.New()
 	s.clientList = make(map[uint32]*Client)
@@ -58,16 +67,14 @@ func (s *SessionManager) Init() {
 
 //// APIs
 func (s *SessionManager) HandleIncomingClient(conn net.Conn) {
-
 	session := s.sessionPool.Get()
 	client := newClient(&conn, session)
-	fmt.Println(session, "is connected")
 	s.clientList[session] = client
 	// send version information
 	version := &mumbleproto.Version{
 		Version:     proto.Uint32(0x10205),
 		Release:     proto.String(config.AppName),
-		CryptoModes: SupportedModes(),
+		CryptoModes: crypt.SupportedModes(),
 	}
 	err := client.sendMessage(version)
 	if err != nil {
@@ -111,28 +118,26 @@ func (s *SessionManager) HandleIncomingClient(conn net.Conn) {
 	if msg.kind == mumbleproto.MessageAuthenticate {
 		err = s.handleAuthenticate(msg)
 	}
-
-	servermodule.AsyncCall(apikeys.Receive, client)
+	servermodule.AsyncCall(event.Receive, client)
 }
 
 func (s *SessionManager) BroadcastMessage(msg interface{}) {
 	for _, eachClient := range s.clientList {
-		/*if client.state < StateClientAuthenticated {
-			continue
-		}*/
 		eachClient.sendMessage(msg)
 	}
 }
 
-func (s *SessionManager) SendMessages(sessions []uint32, msg interface{}) {
+func (s *SessionManager) SendMultipleMessage(sessions []uint32, msg interface{}) error {
+
 	for _, session := range sessions {
-		fmt.Println(session)
 		if eachClient, ok := s.clientList[session]; ok {
 			eachClient.sendMessage(msg)
 		} else {
 			panic("session not exist")
 		}
 	}
+
+	return nil
 }
 func (s *SessionManager) isValidName(userName string) bool {
 
@@ -170,9 +175,6 @@ func (s *SessionManager) handleAuthenticate(msg *Message) error {
 	}
 
 	client.codecs = authenticate.CeltVersions
-	if len(client.codecs) == 0 {
-		//todo : no codec msg case
-	}
 
 	//send codec version
 	codecMsg := &mumbleproto.CodecVersion{
@@ -186,9 +188,9 @@ func (s *SessionManager) handleAuthenticate(msg *Message) error {
 	}
 
 	/// send channel state
-	servermodule.Call(apikeys.SendChannelList, client)
+	servermodule.Call(event.SendChannelList, client)
 	// enter the root channel as default channel
-	servermodule.Call(apikeys.EnterChannel, ROOT_CHANNEL, client)
+	servermodule.Call(event.EnterChannel, ROOT_CHANNEL, client)
 
 	sync := &mumbleproto.ServerSync{
 		Session:      proto.Uint32(uint32(client.session)),
@@ -212,8 +214,40 @@ func (s *SessionManager) handleAuthenticate(msg *Message) error {
 	return nil
 }
 
-// todo : cast time.Time type to number type or overloading
-/*
-func elapsed(prev time.Time, now time.Time)(time.Time){
-	return now - prev
-}*/
+func (s *SessionManager) GiveSpeakAbility(userState *mumbleproto.UserState) error {
+
+	actor := s.client(userState.GetActor())
+	target := s.client(userState.GetSession())
+	//can't change other person's right to speak
+	if userState.GetMute() == true {
+		if err := target.sendPermissionDenied(mumbleproto.PermissionDenied_Permission); err != nil {
+			return err
+		}
+	}
+
+	// give actor's right to talk to the target
+	if userState.GetMute() == false {
+		//only when actor has the right
+		if target.existUsableMic &&
+			target.existUsableSpeaker &&
+			actor.mute == false {
+			actor.mute = true
+			newUserState := &mumbleproto.UserState{
+				Session: proto.Uint32(actor.Session()),
+				Actor:   proto.Uint32(actor.Session()),
+				Mute:    proto.Bool(true),
+			}
+
+			servermodule.AsyncCall(event.BroadcastChannel, actor.Channel.Id, newUserState)
+
+			// give it to target
+			target.mute = true
+			newUserState.Session = proto.Uint32(target.Session())
+			newUserState.Actor = proto.Uint32(target.Session())
+			newUserState.Mute = proto.Bool(false)
+			servermodule.AsyncCall(event.BroadcastChannel, target.Channel.Id, newUserState)
+		}
+		return nil
+	}
+	return nil
+}

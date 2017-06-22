@@ -1,4 +1,4 @@
-package apikeys
+package event
 
 const (
 	ModSession = (iota + 1) * 100
@@ -12,7 +12,8 @@ const (
 	HandleIncomingClient = ModSession + iota + 1
 	BroadcastMessage
 	RemoveClient
-	SendMessages
+	SendMultipleMessages
+	GiveSpeakAbility
 )
 
 const (
@@ -28,6 +29,7 @@ const (
 	AddChannel
 	BroadCastChannelWithoutMe
 	BroadCastVoiceToChannel
+	RemoveChannel
 )
 
 const ( // 401 ~

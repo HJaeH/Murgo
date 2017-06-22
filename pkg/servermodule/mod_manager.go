@@ -143,11 +143,11 @@ func Start(modManagerInterface ModManagerCallback) {
 	modManager := new(modManager)
 	modManager.init()
 
-	//run router
-	newRouter(mmid, modManager)
+	//run
+	newDispatcher(mmid, modManager)
 
-	//set module manager to router
-	router.modManager[mmid] = modManager
+	//set module manager to dispatcher
+	dispatcher.modManager[mmid] = modManager
 
 	go modManager.run()
 	//app's Init callback

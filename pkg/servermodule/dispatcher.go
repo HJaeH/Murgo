@@ -5,46 +5,44 @@ import (
 	"sync"
 )
 
-const (
-	routerQueueSize = 5
-)
-
-type Router struct {
-	callRouter      chan *CallMessage
-	asyncCallRouter chan *AsyncCallMessage
+type Dispatcher struct {
+	call      chan *CallMessage
+	asyncCall chan *AsyncCallMessage
 
 	modManager map[string]*modManager
 	apiMap     map[int]*API
+	mux        sync.Mutex
 }
 
-//global singleton router
-var router *Router
+//global singleton
+var dispatcher *Dispatcher
 var once sync.Once
 
-func newRouter(modId string, modManager *modManager) *Router {
+func newDispatcher(modId string, modManager *modManager) *Dispatcher {
 
 	once.Do(func() {
-		router = &Router{}
+		dispatcher = &Dispatcher{}
 	})
-	router.init()
-	router.modManager[modId] = modManager
-	go router.run()
-	return router
+	dispatcher.init()
+	dispatcher.modManager[modId] = modManager
+	go dispatcher.run()
+	return dispatcher
 }
 
-func (r *Router) init() {
-	r.asyncCallRouter = make(chan *AsyncCallMessage, routerQueueSize)
-	r.callRouter = make(chan *CallMessage)
-	r.modManager = make(map[string]*modManager)
-	r.apiMap = make(map[int]*API)
+func (d *Dispatcher) init() {
+	d.asyncCall = make(chan *AsyncCallMessage, 10)
+	d.call = make(chan *CallMessage)
+	d.modManager = make(map[string]*modManager)
+	d.apiMap = make(map[int]*API)
 }
-func (r *Router) run() {
+
+func (d *Dispatcher) run() {
 	for {
 		select {
 		//todo : cast, call 반복 코드 제거
-		case m := <-r.callRouter:
+		case m := <-d.call:
 			//fmt.Println(m.apiKey, "call received")
-			api := r.getAPI(m.apiKey)
+			api := d.getEvent(m.apiKey)
 			mod := api.module
 			select {
 			case mod.buf <- true:
@@ -57,12 +55,10 @@ func (r *Router) run() {
 					buf:      mod.buf,
 				}
 			}
-		case m := <-r.asyncCallRouter:
+		case m := <-d.asyncCall:
 
-			api := r.getAPI(m.apiKey)
+			api := d.getEvent(m.apiKey)
 			mod := api.module
-			//for test
-			//fmt.Println(mod.mid, len(mod.semaphore), len(mod.buf))
 			select {
 			case mod.buf <- true:
 				mod.sup.asyncCallChan <- &AsyncCallMessage{
@@ -74,7 +70,7 @@ func (r *Router) run() {
 				}
 			default:
 				fmt.Println("message lost at mod :", mod.mid)
-				panic("module buffer is full and message is lost, need to change capacity")
+				panic("module buffer overflow occured and message is lost, need to change capacity")
 			}
 
 		}
@@ -82,7 +78,7 @@ func (r *Router) run() {
 }
 
 func asyncCall(key int, args ...interface{}) {
-	router.asyncCallRouter <- &AsyncCallMessage{
+	dispatcher.asyncCall <- &AsyncCallMessage{
 		args:   args,
 		apiKey: key,
 	}
@@ -96,12 +92,16 @@ func call(apiKey int, args ...interface{}) {
 		reply:  reply,
 	}
 
-	router.callRouter <- msg
+	dispatcher.call <- msg
 	<-reply
 }
 
-func (r *Router) getAPI(apiKey int) *API {
-	if api, ok := r.apiMap[apiKey]; ok {
+func (d *Dispatcher) getEvent(apiKey int) *API {
+	//r.mux.Lock()
+	api, ok := d.apiMap[apiKey]
+	//r.mux.Unlock()
+
+	if ok {
 		return api
 	} else {
 		fmt.Println("Invalid API key: %s", apiKey)
@@ -115,7 +115,7 @@ func AsyncCall(key int, args ...interface{}) {
 
 }
 
-//todo : return result - issue : specifying return value type.
+//todo : return result - issue : specifying return type.
 func Call(key int, args ...interface{}) {
 	call(key, args...)
 }
