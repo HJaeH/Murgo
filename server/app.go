@@ -1,32 +1,32 @@
 package server
 
 import (
-	"fmt"
 	"murgo/config"
 	"murgo/pkg/servermodule"
+	"murgo/pkg/servermodule/log"
 )
 
-type ModManager struct{}
+type ServerModule struct{}
+
+const SingleThread = 1
 
 func Start() {
 
-	servermodule.Start(new(ModManager)) // root supervisor
+	if err := servermodule.Start(new(ServerModule)); err != nil {
+
+	}
 }
 func Terminate() error {
 	return servermodule.Terminate()
 }
 
 //callback
-func (m *ModManager) Init() {
+func (s *ServerModule) Init() {
 
 	//server modules
-	servermodule.AddModule(m, new(SessionManager), 1)
-	servermodule.AddModule(m, new(ChannelManager), 1)
-	servermodule.AddModule(m, new(Server), 100)
-	servermodule.AddModule(m, new(MessageHandler), 5)
-	fmt.Println(config.AppName, "is now running")
-}
-
-func (m *ModManager) Terminate() error {
-	return nil
+	servermodule.AddModule(s, new(SessionManager), SingleThread)
+	servermodule.AddModule(s, new(ChannelManager), SingleThread)
+	servermodule.AddModule(s, new(Server), config.MaxUserConnection+1)
+	servermodule.AddModule(s, new(MessageHandler), 10)
+	log.Infof(" %s is now running", config.AppName)
 }

@@ -6,18 +6,20 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"log"
 	"net"
 
 	"murgo/pkg/mumbleproto"
 
 	"murgo/pkg/servermodule"
+	"murgo/pkg/servermodule/log"
 
 	"fmt"
 
 	"murgo/server/util/event"
 
 	"murgo/server/util/crypt"
+
+	"time"
 
 	"github.com/golang/protobuf/proto"
 )
@@ -56,6 +58,7 @@ type Client struct {
 	version      uint32
 
 	*log.Logger
+	timer *time.Timer
 }
 
 func newClient(conn *net.Conn, session uint32) *Client {
@@ -70,7 +73,7 @@ func newClient(conn *net.Conn, session uint32) *Client {
 	client.session = session
 	client.reader = bufio.NewReader(*client.conn)
 
-	// 기본으로 루트채널에 할당
+	client.timer = time.NewTimer(time.Second * 10)
 	client.Channel = nil
 	return client
 }
@@ -158,7 +161,6 @@ func (c *Client) Disconnect() {
 		c.disconnected = true
 		(*c.conn).Close()
 		servermodule.AsyncCall(event.RemoveClient, c)
-		fmt.Println("clinet left")
 	}
 }
 
@@ -258,9 +260,4 @@ func (c *Client) addFrame(packetSize uint32) error {
 	}
 
 	return nil
-}
-
-func (client *Client) Panicf(format string, v ...interface{}) {
-	client.Printf(format, v...)
-	client.Disconnect()
 }

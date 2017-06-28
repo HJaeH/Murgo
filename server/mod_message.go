@@ -1,16 +1,21 @@
 package server
 
 import (
-	"fmt"
 	"murgo/pkg/mumbleproto"
 	"murgo/pkg/servermodule"
-	"murgo/server/util/log"
+	"murgo/pkg/servermodule/log"
 
 	"murgo/config"
 
 	"murgo/server/util/event"
 
+	"errors"
+
 	"github.com/golang/protobuf/proto"
+)
+
+const (
+	MaxTextMessageLength = 200
 )
 
 type MessageHandler struct{}
@@ -22,26 +27,26 @@ type Message struct {
 }
 
 func (messageHandler *MessageHandler) HandleMessage(msg *Message) {
-	//todo : refer the usage of murmur idle time
-	msg.client.resetIdle()
+
+	client := msg.client
+	client.resetIdle()
 	var err error
 	switch msg.kind {
 	case mumbleproto.MessagePing:
 		err = messageHandler.handlePingMessage(msg)
 	case mumbleproto.MessageUserStats:
-		messageHandler.handleUserStatsMessage(msg)
-
+		err = messageHandler.handleUserStatsMessage(msg)
 	case mumbleproto.MessageChannelState:
-		messageHandler.handleChannelStateMessage(msg)
+		err = messageHandler.handleChannelStateMessage(msg)
 	case mumbleproto.MessageUserState:
-		messageHandler.handleUserStateMessage(msg)
+		err = messageHandler.handleUserStateMessage(msg)
 	case mumbleproto.MessageTextMessage:
-		messageHandler.handleTextMessage(msg)
+		err = messageHandler.handleTextMessage(msg)
 	default:
-		err = log.Error("Uncategorized msg type", msg.kind)
+		log.Errorf("Uncategorized msg type : %d", msg.kind)
 	}
 	if err != nil {
-		log.ErrorP(err)
+		log.Error(err, "error while handling message :", msg.kind)
 	}
 }
 
@@ -70,7 +75,7 @@ func (m *MessageHandler) handleUserStateMessage(msg *Message) error {
 	actor := msg.client
 	targetSession := userState.GetSession()
 
-	// deaf, suppress, priority_speaker는 변경할 수 없다.
+	//  cannot change follows : deaf, suppress, priority_speaker
 	if userState.Deaf != nil ||
 		userState.Suppress != nil ||
 		userState.PrioritySpeaker != nil {
@@ -106,7 +111,7 @@ func (m *MessageHandler) handleUserStateMessage(msg *Message) error {
 		}
 		//case A3. change my speak ablility
 		if userState.Mute != nil {
-			//self mute와 별개로 channel에는 정해진 수(12)의 발언권을 가진 유저들이 있다
+			//self mute와 별개로 channel에는 정해진 수의 발언권을 가진 유저들이 있다
 			if userState.GetMute() == false {
 				if !actor.existUsableMic ||
 					!actor.existUsableSpeaker {
@@ -116,7 +121,7 @@ func (m *MessageHandler) handleUserStateMessage(msg *Message) error {
 					return nil
 				}
 				if actor.Channel.currentSpeakerCount() >= config.MaxSpeaker {
-					if err := target.sendPermissionDenied(mumbleproto.PermissionDenied_Permission); err != nil {
+					if err := target.sendPermissionDenied(mumbleproto.PermissionDenied_SpeakerFull); err != nil {
 						log.Error(err)
 					}
 					return nil
@@ -133,6 +138,7 @@ func (m *MessageHandler) handleUserStateMessage(msg *Message) error {
 		}
 
 		//case A4.change userState itself.
+
 		changed := false
 		if userState.ExistUsableMic != nil {
 			target.existUsableMic = userState.GetExistUsableMic()
@@ -144,6 +150,9 @@ func (m *MessageHandler) handleUserStateMessage(msg *Message) error {
 		}
 		if userState.SelfDeaf != nil {
 			target.selfDeaf = userState.GetSelfDeaf()
+
+			//todo :deaf시에 mute도 같이 변함
+			// target.selfMute = userState.GetSelfDeaf()
 			changed = true
 		}
 		if userState.SelfMute != nil {
@@ -158,7 +167,7 @@ func (m *MessageHandler) handleUserStateMessage(msg *Message) error {
 			}
 		}
 
-	} else { //case B. send userState to other person (target) -
+	} else { //case B. send userState to other person (target)
 		servermodule.Call(event.GiveSpeakAbility, userState)
 	}
 
@@ -166,27 +175,28 @@ func (m *MessageHandler) handleUserStateMessage(msg *Message) error {
 
 }
 
-func (m *MessageHandler) handleChannelStateMessage(tempMsg interface{}) {
-	msg := tempMsg.(*Message)
+func (m *MessageHandler) handleChannelStateMessage(msg *Message) error {
 	channelStateMsg := &mumbleproto.ChannelState{}
 	err := proto.Unmarshal(msg.buf, channelStateMsg)
 	if err != nil {
-		fmt.Println(err)
-		return
+		return err
 	}
 	if channelStateMsg.ChannelId == nil && channelStateMsg.Name != nil && *channelStateMsg.Temporary == true && *channelStateMsg.Parent == 0 && *channelStateMsg.Position == 0 {
 		servermodule.Call(event.AddChannel, *channelStateMsg.Name, msg.client)
 	}
+
+	return nil
 }
-func (m *MessageHandler) handleUserStatsMessage(msg *Message) {
+
+func (m *MessageHandler) handleUserStatsMessage(msg *Message) error {
 	userStats := &mumbleproto.UserStats{}
 	client := msg.client
 	err := proto.Unmarshal(msg.buf, userStats)
 	if err != nil {
-		fmt.Println(err)
-		return
+		return err
 	}
 	client.sendMessage(msg.client.toUserStats())
+	return nil
 }
 
 func (m *MessageHandler) handleTextMessage(msg *Message) error {
@@ -197,13 +207,17 @@ func (m *MessageHandler) handleTextMessage(msg *Message) error {
 		return err
 	}
 	if len(*textMsg.Message) == 0 {
-		return err
+		return errors.New("No message passed")
+	} else if len(*textMsg.Message) > MaxTextMessageLength {
+		client.sendPermissionDenied(mumbleproto.PermissionDenied_TextTooLong)
+		return nil
 	}
+
+	// send text message to channels
 	newMsg := &mumbleproto.TextMessage{
 		Actor:   proto.Uint32(client.Session()),
 		Message: textMsg.Message,
 	}
-	// send text message to channels
 	for _, eachChannelId := range textMsg.ChannelId {
 		servermodule.AsyncCall(event.BroadCastChannelWithoutMe, eachChannelId, client, newMsg)
 	}
@@ -215,6 +229,6 @@ func (m *MessageHandler) handleTextMessage(msg *Message) error {
 }
 
 func (m *MessageHandler) Init() {
-	servermodule.RegisterAPI((*MessageHandler).HandleMessage, event.HandleMessage)
+	servermodule.EventRegister((*MessageHandler).HandleMessage, event.HandleMessage)
 
 }

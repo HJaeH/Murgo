@@ -1,13 +1,11 @@
 package server
 
 import (
-	"fmt"
-
 	"murgo/config"
 	"murgo/pkg/mumbleproto"
 	"murgo/pkg/servermodule"
+	"murgo/pkg/servermodule/log"
 	"murgo/pkg/sessionpool"
-	"murgo/server/util/log"
 
 	"net"
 
@@ -16,6 +14,8 @@ import (
 	"murgo/server/util/event"
 
 	"murgo/server/util/crypt"
+
+	"errors"
 
 	"github.com/golang/protobuf/proto"
 	"mumble.info/grumble/pkg/acl"
@@ -32,11 +32,10 @@ func (s *SessionManager) getClientList() map[uint32]*Client {
 func (s *SessionManager) client(session uint32) *Client {
 	client, ok := s.clientList[session]
 	if ok != true {
-		log.ErrorP("invalid session")
+		log.Error("invalid session")
 	}
 	return client
 }
-
 func (s *SessionManager) RemoveClient(client *Client) {
 	//delete from session list
 	delete(s.clientList, client.session)
@@ -49,94 +48,119 @@ func (s *SessionManager) RemoveClient(client *Client) {
 		}
 
 	}
-
 	s.sessionPool.Reclaim(client.Session())
 }
 
-//Callbacks
-func (s *SessionManager) Init() {
-	servermodule.RegisterAPI((*SessionManager).HandleIncomingClient, event.HandleIncomingClient)
-	servermodule.RegisterAPI((*SessionManager).BroadcastMessage, event.BroadcastMessage)
-	servermodule.RegisterAPI((*SessionManager).RemoveClient, event.RemoveClient)
-	servermodule.RegisterAPI((*SessionManager).SendMultipleMessage, event.SendMultipleMessages)
-	servermodule.RegisterAPI((*SessionManager).GiveSpeakAbility, event.GiveSpeakAbility)
-
-	s.sessionPool = sessionpool.New()
-	s.clientList = make(map[uint32]*Client)
-}
-
-//// APIs
 func (s *SessionManager) HandleIncomingClient(conn net.Conn) {
+
 	session := s.sessionPool.Get()
 	client := newClient(&conn, session)
 	s.clientList[session] = client
-	// send version information
-	version := &mumbleproto.Version{
+
+	//check current client count
+	if s.totalClientCount() >= config.MaxUserConnection {
+		if err := client.sendPermissionDenied(mumbleproto.PermissionDenied_Permission); err != nil {
+			log.Error(err)
+
+		}
+		client.Disconnect()
+		log.Error("Server is full")
+		return
+	}
+
+	// Version exchange
+	versionMsg := &mumbleproto.Version{
 		Version:     proto.Uint32(0x10205),
 		Release:     proto.String(config.AppName),
 		CryptoModes: crypt.SupportedModes(),
 	}
-	err := client.sendMessage(version)
-	if err != nil {
-		fmt.Println("Error sending message to client")
+	if err := client.sendMessage(versionMsg); err != nil {
+		client.Disconnect()
+		log.Error(err)
+		return
 	}
 
-	msg, err := client.readProtoMessage()
-	if err != nil {
-		if err != nil {
-			if err == io.EOF {
-				client.Disconnect()
-			} else {
-				panic(err)
+	if msg, err := client.readProtoMessage(); err != nil {
+		client.Disconnect()
+		if err != io.EOF {
+			log.Error(err)
+		}
+		return
+	} else {
+		if msg.kind == mumbleproto.MessageVersion {
+			version := &mumbleproto.Version{}
+			err := proto.Unmarshal(msg.buf, version)
+			if err != nil {
+				log.Error(err)
+				return
 			}
+			client.version = *version.Version
+
+		} else {
+			log.Error("Unexpected connection setup protocol")
+			client.Disconnect()
 			return
 		}
 	}
-	if msg.kind == mumbleproto.MessageVersion {
-		version := &mumbleproto.Version{}
-		err := proto.Unmarshal(msg.buf, version)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
 
-		client.version = *version.Version
+	// generate random key
+	client.crypt.GenerateKey()
+	cryptMsg := &mumbleproto.CryptSetup{
+		Key:         client.crypt.Key(),
+		ClientNonce: client.crypt.EncryptIV(),
+		ServerNonce: client.crypt.DecryptIV(),
+	}
+	if err := client.sendMessage(cryptMsg); err != nil {
+		client.Disconnect()
+		log.Error(err)
+		return
 	}
 
-	msg, err = client.readProtoMessage()
-	if err != nil {
-		if err != nil {
-			if err == io.EOF {
+	// Authentication
+	if msg, err := client.readProtoMessage(); err != nil {
+		client.Disconnect()
+		if err != io.EOF {
+			log.Error(err)
+		}
+		return
+	} else {
+		if msg.kind == mumbleproto.MessageAuthenticate {
+			if err := s.handleAuthenticate(msg); err != nil {
 				client.Disconnect()
-			} else {
-				panic(err)
+				log.Error(err)
+				return
 			}
+
+		} else {
+			log.Error("Invalid connection setup protocol")
+			client.Disconnect()
 			return
 		}
 	}
 
-	if msg.kind == mumbleproto.MessageAuthenticate {
-		err = s.handleAuthenticate(msg)
-	}
+	//run receive loop
 	servermodule.AsyncCall(event.Receive, client)
 }
 
 func (s *SessionManager) BroadcastMessage(msg interface{}) {
 	for _, eachClient := range s.clientList {
-		eachClient.sendMessage(msg)
+		if err := eachClient.sendMessage(msg); err != nil {
+			log.Error("Error sending message")
+		}
 	}
 }
 
 func (s *SessionManager) SendMultipleMessage(sessions []uint32, msg interface{}) error {
-
 	for _, session := range sessions {
 		if eachClient, ok := s.clientList[session]; ok {
-			eachClient.sendMessage(msg)
+			if err := eachClient.sendMessage(msg); err != nil {
+				log.Error("Error sending message")
+			}
 		} else {
-			panic("session not exist")
+			log.Error("Session id doesn't exist")
+			return errors.New("Session id doesn't exist")
 		}
 	}
-
 	return nil
 }
 func (s *SessionManager) isValidName(userName string) bool {
@@ -151,30 +175,26 @@ func (s *SessionManager) isValidName(userName string) bool {
 
 func (s *SessionManager) handleAuthenticate(msg *Message) error {
 
+	client := msg.client
+
+	//Dealing with authenticate message
 	authenticate := &mumbleproto.Authenticate{}
 	err := proto.Unmarshal(msg.buf, authenticate)
 	if err != nil {
 		return err
 	}
-	client := msg.client
-	newUserName := *authenticate.Username
-	if !s.isValidName(newUserName) {
+	//check username validation
+	userName := authenticate.GetUsername()
+	if !s.isValidName(userName) {
+		if err := client.sendPermissionDenied(mumbleproto.PermissionDenied_UserName); err != nil {
+			errors.New("Error sending message")
+		}
 		client.Disconnect()
-		return log.Error("Duplicated username")
+		return errors.New("Duplicated username")
 	}
-	client.UserName = newUserName
-
-	client.crypt.GenerateKey()
-	cryptMsg := &mumbleproto.CryptSetup{
-		Key:         client.crypt.Key(),
-		ClientNonce: client.crypt.EncryptIV(),
-		ServerNonce: client.crypt.DecryptIV(),
-	}
-	if err = client.sendMessage(cryptMsg); err != nil {
-		return err
-	}
-
-	client.codecs = authenticate.CeltVersions
+	client.UserName = userName
+	//set codecs
+	client.codecs = authenticate.GetCeltVersions()
 
 	//send codec version
 	codecMsg := &mumbleproto.CodecVersion{
@@ -192,9 +212,10 @@ func (s *SessionManager) handleAuthenticate(msg *Message) error {
 	// enter the root channel as default channel
 	servermodule.Call(event.EnterChannel, ROOT_CHANNEL, client)
 
+	//send server sync
 	sync := &mumbleproto.ServerSync{
 		Session:      proto.Uint32(uint32(client.session)),
-		MaxBandwidth: proto.Uint32(72000),
+		MaxBandwidth: proto.Uint32(config.MaxBandwidth),
 		WelcomeText:  proto.String(config.WelComeMessage),
 		Permissions:  proto.Uint64(uint64(acl.AllPermissions)),
 	}
@@ -217,7 +238,9 @@ func (s *SessionManager) handleAuthenticate(msg *Message) error {
 func (s *SessionManager) GiveSpeakAbility(userState *mumbleproto.UserState) error {
 
 	actor := s.client(userState.GetActor())
+
 	target := s.client(userState.GetSession())
+
 	//can't change other person's right to speak
 	if userState.GetMute() == true {
 		if err := target.sendPermissionDenied(mumbleproto.PermissionDenied_Permission); err != nil {
@@ -231,23 +254,48 @@ func (s *SessionManager) GiveSpeakAbility(userState *mumbleproto.UserState) erro
 		if target.existUsableMic &&
 			target.existUsableSpeaker &&
 			actor.mute == false {
+
 			actor.mute = true
 			newUserState := &mumbleproto.UserState{
 				Session: proto.Uint32(actor.Session()),
 				Actor:   proto.Uint32(actor.Session()),
 				Mute:    proto.Bool(true),
 			}
-
-			servermodule.AsyncCall(event.BroadcastChannel, actor.Channel.Id, newUserState)
+			servermodule.Call(event.BroadcastChannel, actor.Channel.Id, newUserState)
 
 			// give it to target
-			target.mute = true
-			newUserState.Session = proto.Uint32(target.Session())
-			newUserState.Actor = proto.Uint32(target.Session())
-			newUserState.Mute = proto.Bool(false)
-			servermodule.AsyncCall(event.BroadcastChannel, target.Channel.Id, newUserState)
+			target.mute = false
+			newUserState = &mumbleproto.UserState{
+				Session: proto.Uint32(target.Session()),
+				Actor:   proto.Uint32(target.Session()),
+				Mute:    proto.Bool(false),
+			}
+			//let other clients know the user's state
+			servermodule.Call(event.BroadcastChannel, target.Channel.Id, newUserState)
+			return nil
+		} else {
+			target.sendPermissionDenied(mumbleproto.PermissionDenied_Permission)
+			return nil
 		}
-		return nil
 	}
-	return nil
+	return errors.New("Invalid message data")
+}
+
+func (s *SessionManager) totalClientCount() int {
+
+	return len(s.clientList)
+}
+
+// callback
+func (s *SessionManager) Init() {
+	s.sessionPool = sessionpool.New()
+	s.clientList = make(map[uint32]*Client)
+
+	//add event
+	servermodule.EventRegister((*SessionManager).HandleIncomingClient, event.HandleIncomingClient)
+	servermodule.EventRegister((*SessionManager).BroadcastMessage, event.BroadcastMessage)
+	servermodule.EventRegister((*SessionManager).RemoveClient, event.RemoveClient)
+	servermodule.EventRegister((*SessionManager).SendMultipleMessage, event.SendMultipleMessages)
+	servermodule.EventRegister((*SessionManager).GiveSpeakAbility, event.GiveSpeakAbility)
+
 }

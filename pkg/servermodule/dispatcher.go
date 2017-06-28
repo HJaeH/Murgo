@@ -1,7 +1,8 @@
 package servermodule
 
 import (
-	"fmt"
+	"errors"
+	"murgo/pkg/servermodule/log"
 	"sync"
 )
 
@@ -10,7 +11,7 @@ type Dispatcher struct {
 	asyncCall chan *AsyncCallMessage
 
 	modManager map[string]*modManager
-	apiMap     map[int]*API
+	eventMap   map[int]*Event
 	mux        sync.Mutex
 }
 
@@ -33,79 +34,84 @@ func (d *Dispatcher) init() {
 	d.asyncCall = make(chan *AsyncCallMessage, 10)
 	d.call = make(chan *CallMessage)
 	d.modManager = make(map[string]*modManager)
-	d.apiMap = make(map[int]*API)
+	d.eventMap = make(map[int]*Event)
 }
 
 func (d *Dispatcher) run() {
+	defer restart(d.run)
+	d.dispatchLoop()
+}
+func (d *Dispatcher) dispatchLoop() {
 	for {
 		select {
 		//todo : cast, call 반복 코드 제거
 		case m := <-d.call:
-			//fmt.Println(m.apiKey, "call received")
-			api := d.getEvent(m.apiKey)
-			mod := api.module
-			select {
-			case mod.buf <- true:
-				mod.sup.callChan <- &CallMessage{
-					args:     m.args,
-					apiKey:   m.apiKey,
-					reply:    m.reply,
-					apiVal:   api.val,
-					syncChan: mod.semaphore,
-					buf:      mod.buf,
+			if event, err := d.getEvent(m.eventKey); err != nil {
+				log.Error(err, "Event key is not exist")
+			} else {
+				mod := event.module
+				select {
+				case mod.buf <- true:
+					mod.sup.callChan <- &CallMessage{
+						args:      m.args,
+						eventKey:  m.eventKey,
+						reply:     m.reply,
+						eventVal:  event.val,
+						semaphore: mod.semaphore,
+						buf:       mod.buf,
+					}
 				}
 			}
+
 		case m := <-d.asyncCall:
-
-			api := d.getEvent(m.apiKey)
-			mod := api.module
-			select {
-			case mod.buf <- true:
-				mod.sup.asyncCallChan <- &AsyncCallMessage{
-					args:     m.args,
-					apiKey:   m.apiKey,
-					apiVal:   api.val,
-					syncChan: mod.semaphore,
-					buf:      mod.buf,
+			if event, err := d.getEvent(m.eventKey); err != nil {
+				log.Error(err, "Event key is not exist")
+			} else {
+				mod := event.module
+				select {
+				case mod.buf <- true:
+					mod.sup.asyncCallChan <- &AsyncCallMessage{
+						args:      m.args,
+						eventKey:  m.eventKey,
+						eventVal:  event.val,
+						semaphore: mod.semaphore,
+						buf:       mod.buf,
+					}
+				default:
+					log.Warnf("Message lost at module : %s", mod.mid)
 				}
-			default:
-				fmt.Println("message lost at mod :", mod.mid)
-				panic("module buffer overflow occured and message is lost, need to change capacity")
 			}
-
 		}
 	}
 }
 
-func asyncCall(key int, args ...interface{}) {
+func asyncCall(eventKey int, args ...interface{}) {
 	dispatcher.asyncCall <- &AsyncCallMessage{
-		args:   args,
-		apiKey: key,
+		args:     args,
+		eventKey: eventKey,
 	}
 }
 
-func call(apiKey int, args ...interface{}) {
+func call(eventKey int, args ...interface{}) {
 	reply := make(chan bool)
 	msg := &CallMessage{
-		apiKey: apiKey,
-		args:   args,
-		reply:  reply,
+		eventKey: eventKey,
+		args:     args,
+		reply:    reply,
 	}
 
 	dispatcher.call <- msg
 	<-reply
 }
 
-func (d *Dispatcher) getEvent(apiKey int) *API {
+func (d *Dispatcher) getEvent(eventKey int) (*Event, error) {
+	//todo: concurrency test
 	//r.mux.Lock()
-	api, ok := d.apiMap[apiKey]
 	//r.mux.Unlock()
-
-	if ok {
-		return api
+	if event, ok := d.eventMap[eventKey]; ok {
+		return event, nil
 	} else {
-		fmt.Println("Invalid API key: %s", apiKey)
-		panic("Invalid API key")
+		return nil, errors.New("Invalid Event key")
 	}
 
 }

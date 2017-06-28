@@ -28,7 +28,6 @@ const (
 	BroadcastChannel
 	AddChannel
 	BroadCastChannelWithoutMe
-	BroadCastVoiceToChannel
 	RemoveChannel
 )
 

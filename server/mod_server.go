@@ -13,6 +13,10 @@ import (
 
 	"murgo/server/util/event"
 
+	"time"
+
+	"murgo/pkg/servermodule/log"
+
 	"mumble.info/grumble/pkg/packetdata"
 )
 
@@ -21,18 +25,19 @@ type Server struct {
 }
 
 func (s *Server) Accept() {
-	conn, err := s.ln.Accept()
-	if err != nil {
-		fmt.Println(" Accepting a conneciton failed handling a client")
-		return
+	for {
+		conn, err := s.ln.Accept()
+		if err != nil {
+			log.Error(" Accepting a conneciton failed handling a client")
+			continue
+		}
+		servermodule.AsyncCall(event.HandleIncomingClient, conn)
 	}
-	servermodule.AsyncCall(event.HandleIncomingClient, conn)
-	servermodule.AsyncCall(event.Accept)
 }
 
 func (s *Server) Init() {
-	servermodule.RegisterAPI((*Server).Receive, event.Receive)
-	servermodule.RegisterAPI((*Server).Accept, event.Accept)
+	servermodule.EventRegister((*Server).Receive, event.Receive)
+	servermodule.EventRegister((*Server).Accept, event.Accept)
 	cer, err := tls.LoadX509KeyPair("./src/murgo/config/server.crt", "./src/murgo/config/server.key")
 	if err != nil {
 		fmt.Println(err)
@@ -55,8 +60,10 @@ func (s *Server) terminate() {
 }
 
 func (s *Server) Receive(client *Client) error {
+
 	for {
 		msg, err := client.readProtoMessage()
+		client.timer.Reset(time.Second * 10)
 		if err != nil {
 			if err != nil {
 				if err == io.EOF {
@@ -71,7 +78,7 @@ func (s *Server) Receive(client *Client) error {
 
 		if msg.kind == mumbleproto.MessageUDPTunnel {
 			//Do not send voice data to clients in root channel
-			if client.Channel == nil || client.Channel.Id == ROOT_CHANNEL {
+			if client.Channel == nil || client.Channel.Id == ROOT_CHANNEL || client.mute || client.selfMute {
 				continue
 			} else {
 				buf := msg.buf
@@ -83,11 +90,20 @@ func (s *Server) Receive(client *Client) error {
 				case mumbleproto.UDPMessageVoiceOpus:
 					client.addFrame(uint32(len(msg.buf)))
 					buf := parseVoiceMessage(client, buf)
-					go client.Channel.BroadCastChannelWithoutMe(buf, client)
+					go client.Channel.broadcastVoice(buf, client)
 				}
 			}
 		} else {
 			servermodule.AsyncCall(event.HandleMessage, msg)
+		}
+
+		select {
+		//client timeout
+		case <-client.timer.C:
+			client.Disconnect()
+			return nil
+		default:
+
 		}
 	}
 	return nil

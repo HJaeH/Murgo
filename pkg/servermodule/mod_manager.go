@@ -1,86 +1,81 @@
 package servermodule
 
 import (
-	"fmt"
+	"errors"
+	"murgo/pkg/servermodule/log"
 	"reflect"
 	"runtime"
 	"strings"
 )
 
-type ModManagerCallback interface {
+type ServerModule interface {
 	Init()
-	Terminate() error
 }
 type modManager struct {
 	isRunning bool
-	children  map[string]*Module
+	children  map[string]*module
 
 	asyncCallChan chan *AsyncCallMessage
 	callChan      chan *CallMessage
-	ModManagerCallback
+	ServerModule
 }
 
 func (m *modManager) init() {
 	m.isRunning = false
-	m.children = make(map[string]*Module)
+	m.children = make(map[string]*module)
 	m.asyncCallChan = make(chan *AsyncCallMessage)
 	m.callChan = make(chan *CallMessage)
 }
 
-func (m *modManager) addChild(mid string, genServer *Module) {
-
+func (m *modManager) addChild(mid string, genServer *module) {
 	m.children[mid] = genServer
 }
 
-// get child module by name
-func (m *modManager) child(mid string) *Module {
+func (m *modManager) child(mid string) (*module, error) {
 	if mod, ok := m.children[mid]; ok {
-		return mod
+		return mod, nil
+	} else {
+		return nil, errors.New("Mid doesn't exist")
 	}
-	panic("Mid doesn't exist")
+
 }
 
 func (m *modManager) run() {
-
-	defer restart(m.handleCallLoop)
+	defer restart(m.run)
 	m.handleCallLoop()
 
 }
 
-func (s *modManager) handleCallLoop() {
-	if s.isRunning {
+func (m *modManager) handleCallLoop() {
 
-		panic("modManager is already runnning")
-	}
-	s.isRunning = true
-	for {
-		select {
-
-		case msg := <-s.callChan:
-			go s.handleCall(msg)
-
-		case msg := <-s.asyncCallChan:
-
-			go s.handleCallAsync(msg)
+	if m.isRunning {
+		log.Error("modManager is already runnning")
+		return
+	} else {
+		m.isRunning = true
+		for {
+			select {
+			case msg := <-m.callChan:
+				go m.handleCall(msg)
+			case msg := <-m.asyncCallChan:
+				go m.handleCallAsync(msg)
+			}
 		}
 	}
 }
 
 func (m *modManager) handleCallAsync(msg *AsyncCallMessage) {
-
 	select {
 	//check whether this module is available now or not
-	case msg.syncChan <- true:
-		doCall(msg.apiVal, msg.args...)
+	case msg.semaphore <- true:
+		doCall(msg.eventVal, msg.args...)
 	default:
-		fmt.Println("buffer is full in", msg.apiKey)
-		asyncCall(msg.apiKey, msg.args...)
+		log.Error("buffer is full in", msg.eventKey)
+		asyncCall(msg.eventKey, msg.args...)
 	}
-
 	defer func() {
-		<-msg.syncChan
+		<-msg.semaphore
 		<-msg.buf
-
 	}()
 
 }
@@ -88,16 +83,16 @@ func (m *modManager) handleCallAsync(msg *AsyncCallMessage) {
 func (m *modManager) handleCall(msg *CallMessage) {
 	select {
 	//check whether this module is available now or not
-	case msg.syncChan <- true:
+	case msg.semaphore <- true:
 		//execute the request
-		doCall(msg.apiVal, msg.args...)
+		doCall(msg.eventVal, msg.args...)
 	default:
 		//call again
-		call(msg.apiKey, msg.args)
+		call(msg.eventKey, msg.args)
 	}
 
 	defer func() {
-		<-msg.syncChan
+		<-msg.semaphore
 		<-msg.buf
 		//cast sync
 		msg.reply <- true
@@ -114,44 +109,51 @@ func doCall(val reflect.Value, args ...interface{}) []reflect.Value {
 		for i, _ := range args {
 			inputs[i] = reflect.ValueOf(args[i])
 		}
-
 		return val.Call(inputs)
 	}
 }
 
-func restart(module func()) {
+func restart(rerun func()) {
 	if err := recover(); err != nil {
-		fmt.Println("Recovered from panic")
-		module()
+
 	}
+	rerun()
 }
 
-func rawReqParser(rawAPI interface{}) (string, string) {
+func rawReqParser(eventInter interface{}) (string, string) {
 
 	//returns string like "main.(*B).A"
-	rawStr := runtime.FuncForPC(reflect.ValueOf(rawAPI).Pointer()).Name()
-	reqs := strings.Split(rawStr, ".")
-	modName := strings.Trim(reqs[len(reqs)-2], "(*)")
-	apiName := reqs[len(reqs)-1]
-	return modName, apiName
+	rawStr := runtime.FuncForPC(reflect.ValueOf(eventInter).Pointer()).Name()
+	eventParts := strings.Split(rawStr, ".")
+	modName := strings.Trim(eventParts[len(eventParts)-2], "(*)")
+	eventName := eventParts[len(eventParts)-1]
+	return modName, eventName
 }
 
-//// externals
-func Start(modManagerInterface ModManagerCallback) {
-	mmid := getMid(modManagerInterface)
-
+func Start(serverModule ServerModule) error {
+	smid := getMid(serverModule)
 	modManager := new(modManager)
 	modManager.init()
 
+	if _, err := log.GetLogger(&log.Log{
+		Path:      "logs/murgo.log",
+		Level:     "debug",
+		Formatter: "text",
+		Console:   false,
+	}); err != nil {
+		return err
+	}
 	//run
-	newDispatcher(mmid, modManager)
+	newDispatcher(smid, modManager)
 
 	//set module manager to dispatcher
-	dispatcher.modManager[mmid] = modManager
+	dispatcher.modManager[smid] = modManager
 
 	go modManager.run()
 	//app's Init callback
-	modManagerInterface.Init()
+	serverModule.Init()
+
+	return nil
 }
 
 //todo stop all routines

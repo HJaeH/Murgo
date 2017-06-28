@@ -6,14 +6,13 @@ import (
 
 	"github.com/golang/protobuf/proto"
 
+	"murgo/config"
 	"murgo/pkg/mumbleproto"
 	"murgo/pkg/servermodule"
+	"murgo/pkg/servermodule/log"
 	"murgo/server/util/event"
-	"murgo/server/util/log"
 	"time"
 )
-
-const ROOT_CHANNEL uint32 = 0
 
 type ChannelManager struct {
 	channelList   map[uint32]*Channel
@@ -22,13 +21,12 @@ type ChannelManager struct {
 }
 
 func (c *ChannelManager) Init() {
-	servermodule.RegisterAPI((*ChannelManager).SendChannelList, event.SendChannelList)
-	servermodule.RegisterAPI((*ChannelManager).EnterChannel, event.EnterChannel)
-	servermodule.RegisterAPI((*ChannelManager).BroadCastChannel, event.BroadcastChannel)
-	servermodule.RegisterAPI((*ChannelManager).AddChannel, event.AddChannel)
-	servermodule.RegisterAPI((*ChannelManager).BroadCastChannelWithoutMe, event.BroadCastChannelWithoutMe)
-	servermodule.RegisterAPI((*ChannelManager).BroadCastVoiceToChannel, event.BroadCastVoiceToChannel)
-	servermodule.RegisterAPI((*ChannelManager).RemoveChannel, event.RemoveChannel)
+	servermodule.EventRegister((*ChannelManager).SendChannelList, event.SendChannelList)
+	servermodule.EventRegister((*ChannelManager).EnterChannel, event.EnterChannel)
+	servermodule.EventRegister((*ChannelManager).BroadCastChannel, event.BroadcastChannel)
+	servermodule.EventRegister((*ChannelManager).AddChannel, event.AddChannel)
+	servermodule.EventRegister((*ChannelManager).BroadCastChannelWithoutMe, event.BroadCastChannelWithoutMe)
+	servermodule.EventRegister((*ChannelManager).RemoveChannel, event.RemoveChannel)
 	c.init()
 
 }
@@ -49,9 +47,10 @@ func (c *ChannelManager) AddChannel(channelName string, client *Client) error {
 
 	if check := c.checkChannelNameDuplication(channelName); check {
 		if err := client.sendPermissionDenied(mumbleproto.PermissionDenied_ChannelName); err != nil {
-			return log.Error(err)
+			return err
 		}
-		return log.Error("Channel name duplicated")
+		return errors.New("Channel name duplicated")
+
 	}
 
 	// create new channel
@@ -117,8 +116,20 @@ func (c *ChannelManager) SendChannelList(client *Client) {
 
 //todo : enter channel 이랑 client.disconnect 에서 중복 코드 존재
 func (c *ChannelManager) EnterChannel(channelId uint32, client *Client) error {
-
 	newChannel, _ := c.channel(channelId)
+
+	if newChannel.userCount() >= config.MaxUserChannel {
+		if err := client.sendPermissionDenied(mumbleproto.PermissionDenied_ChannelFull); err != nil {
+			log.Error(err)
+		}
+		return nil
+	}
+
+	if newChannel.currentSpeakerCount() >= config.MaxSpeaker {
+		client.mute = true
+
+	}
+
 	oldChannel := client.Channel
 	if oldChannel != nil {
 		oldChannel.leave(client)
@@ -169,7 +180,8 @@ func (c *ChannelManager) RemoveChannel(channel *Channel) error {
 	// Remove the channel itself
 	rootChannel, err := c.channel(ROOT_CHANNEL)
 	if err != nil {
-		return log.Error("Root doesn't exist")
+		log.Error("Root doesn't exist")
+		return err
 	}
 	delete(c.channelList, channel.Id)
 	delete(rootChannel.children, int(channel.Id))
@@ -178,12 +190,6 @@ func (c *ChannelManager) RemoveChannel(channel *Channel) error {
 	}
 	servermodule.AsyncCall(event.BroadcastMessage, channelRemoveMsg)
 	return nil
-}
-
-func (c *ChannelManager) BroadCastVoiceToChannel(client *Client, voiceData []byte) {
-	channel := client.Channel
-
-	c.BroadCastChannelWithoutMe(channel.Id, client, voiceData)
 }
 
 func (c *ChannelManager) checkChannelNameDuplication(channelName string) bool {

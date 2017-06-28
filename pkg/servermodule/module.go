@@ -1,127 +1,124 @@
 package servermodule
 
 import (
+	"errors"
+	"murgo/pkg/servermodule/log"
 	"reflect"
-	"sync"
 )
 
 const (
-	defaultBuf = 100
+	defaultBuf = 256
 )
 
-type ModCallback interface {
+type Module interface {
 	Init()
 }
 
-type Module struct {
+type module struct {
 	mid string
 	sup *modManager
 	val reflect.Value
 
-	apis      map[int]*API
+	events    map[int]*Event
 	semaphore chan bool
 	buf       chan bool
-
-	//todo : 코드 개선
-	wg *sync.WaitGroup
 }
 
-type API struct {
-	module *Module
+type Event struct {
+	module *module
 	name   string
 	val    reflect.Value
 	key    int
 }
 
 type AsyncCallMessage struct {
-	apiVal reflect.Value
-	args   []interface{}
-	apiKey int
+	eventVal reflect.Value
+	args     []interface{}
+	eventKey int
 
-	//by supervisor to call api
-	syncChan chan bool
-	wg       *sync.WaitGroup
-	buf      chan bool
+	semaphore chan bool
+	buf       chan bool
 }
 
 type CallMessage struct {
-	modId  string
-	apiKey int
-	args   []interface{}
+	modId    string
+	eventKey int
+	args     []interface{}
 
-	//by supervisor to call api
-	syncChan chan bool
-	apiVal   reflect.Value
-	buf      chan bool
-	reply    chan bool
+	semaphore chan bool
+	eventVal  reflect.Value
+	buf       chan bool
+	reply     chan bool
 }
 
-func AddModule(smod ModManagerCallback, mod ModCallback, semaphore int) {
-	//genserver에 module을 등록.
+func AddModule(serverMod ServerModule, mod Module, semaphore int) error {
 	// get module name string
-
 	mid := getMid(mod)
-	smid := getMid(smod)
+	smid := getMid(serverMod)
 
-	//set supervisor of new module
-	if sup, ok := dispatcher.modManager[smid]; ok {
-		dispatcher.modManager[mid] = sup
-		gen := newModule(smod, mod, semaphore)
-		sup.addChild(mid, gen)
+	if modManager, ok := dispatcher.modManager[smid]; ok {
+		dispatcher.modManager[mid] = modManager
+		gen := newModule(serverMod, mod, semaphore)
+		modManager.addChild(mid, gen)
 	} else {
-		panic("Invalid supName")
+		log.Errorf("Error adding module %s", mid)
+		return errors.New("Error adding module")
 	}
 	mod.Init()
+	return nil
 
 }
 
-func newModule(smod ModManagerCallback, mod ModCallback, semaphore int) *Module {
-	gen := new(Module)
-	gen.init(smod, mod, semaphore)
-	return gen
+func newModule(smod ServerModule, mod Module, semaphore int) *module {
+	newMod := new(module)
+	newMod.init(smod, mod, semaphore)
+	return newMod
+}
+func newEvent(mod *module, val reflect.Value, eventKey int) *Event {
+	newEvent := new(Event)
+	newEvent.module = mod
+	newEvent.val = val
+	newEvent.key = eventKey
+	return newEvent
 }
 
-func newAPI(mod *Module, val reflect.Value, apiKey int) *API {
-	newAPI := new(API)
-	newAPI.module = mod
-	newAPI.val = val
-	newAPI.key = apiKey
-	return newAPI
+func EventRegister(eventInter interface{}, eventKey int) {
+	modName, eventName := rawReqParser(eventInter)
+	if err := register(modName, eventName, eventKey); err != nil {
+		log.Errorf("Failed to register event at %s, event: %s", modName, eventName)
+		return
+	}
 }
 
-func RegisterAPI(rawAPI interface{}, apiKey int) {
-	modName, apiName := rawReqParser(rawAPI)
-	//fmt.Println(modName, apiName, apiKey, "-------")
-	register(modName, apiName, apiKey)
-
-}
-
-func register(modName string, apiName string, apiKey int) {
+func register(modName string, eventName string, eventKey int) error {
 
 	sup, _ := dispatcher.modManager[modName]
-	mod := sup.child(modName)
-	apiVal := mod.val.MethodByName(apiName)
-	newAPI := newAPI(mod, apiVal, apiKey)
+	mod, err := sup.child(modName)
+	if err != nil {
+		log.Errorf("Module does not exist : %s", modName)
+		return err
+	}
+	eventVal := mod.val.MethodByName(eventName)
+	newEvent := newEvent(mod, eventVal, eventKey)
 
-	mod.apis[apiKey] = newAPI
-	dispatcher.apiMap[apiKey] = newAPI
+	mod.events[eventKey] = newEvent
+	dispatcher.eventMap[eventKey] = newEvent
+	return nil
 }
 
 func getMid(mod interface{}) string {
 	return reflect.TypeOf(mod).Elem().Name()
 }
 
-func (g *Module) init(modManager ModManagerCallback, mod ModCallback, semaphore int) {
+func (m *module) init(modManager ServerModule, mod Module, semaphore int) {
 	mid := getMid(mod)
 	mmid := getMid(modManager)
 
 	parent := dispatcher.modManager[mmid]
-	g.wg = new(sync.WaitGroup)
-	//g.sync = make(chan bool, routeBufferPerModule)
-	g.buf = make(chan bool, defaultBuf)
-	g.semaphore = make(chan bool, semaphore)
-	g.apis = make(map[int]*API)
-	g.mid = mid
-	g.sup = parent
-	g.val = reflect.ValueOf(mod)
+	m.buf = make(chan bool, defaultBuf)
+	m.semaphore = make(chan bool, semaphore)
+	m.events = make(map[int]*Event)
+	m.mid = mid
+	m.sup = parent
+	m.val = reflect.ValueOf(mod)
 }

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"murgo/pkg/servermodule/log"
 	"murgo/server"
 	"os"
 	"os/signal"
@@ -20,10 +20,11 @@ func main() {
 
 	err := server.Terminate()
 	if err != nil {
-		panic("Error while terminating server")
+		log.Error(err, "Error while terminating server")
+		os.Exit(1)
 	}
 
-	fmt.Println("Murgo server terminated")
+	log.Info("Murgo server terminated")
+	log.Info("-------------------------")
 	os.Exit(1)
-
 }
